@@ -3,6 +3,7 @@ import { ProjectStore } from "../core/store";
 import { TaskNode } from "../core/types";
 import { statusLabelL10n, t } from "../i18n";
 import { PromanTreeItem, PromanTreeProvider } from "./promanTree";
+import type { PromanNode } from "./promanTree";
 
 interface TaskQuickPickItem extends vscode.QuickPickItem {
   taskId: string;
@@ -49,7 +50,7 @@ function toPickItem(store: ProjectStore, task: TaskNode): TaskQuickPickItem {
 export async function runTreeSearch(
   store: ProjectStore,
   tree: PromanTreeProvider,
-  treeView: vscode.TreeView<PromanTreeItem>,
+  treeView: vscode.TreeView<PromanNode>,
   openDetails: (taskId: string) => void,
   refreshUi: () => void
 ): Promise<void> {

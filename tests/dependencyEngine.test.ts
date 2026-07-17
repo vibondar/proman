@@ -20,6 +20,16 @@ function task(
 function state(tasks: Record<string, TaskNode>, roots: string[]): ProjectState {
   return {
     meta: { name: "t", createdAt: "", updatedAt: "" },
+    trees: [
+      {
+        id: "main",
+        title: "main",
+        roots,
+        tasks,
+        edges: [],
+        updatedAt: "",
+      },
+    ],
     roots,
     tasks,
     edges: [],

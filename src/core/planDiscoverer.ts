@@ -1,9 +1,10 @@
-import { mergeParsed, parseMarkdownToTree } from "./mdParser";
+import { parseMarkdownToTree } from "./mdParser";
 import { isPlanDocument } from "./planFrontmatter";
 import { sanitizeImportBasename } from "./proposalOps";
 import { ProjectStore } from "./store";
 import { resolveInside } from "./pathSafety";
 import { wsMkdir, wsWriteUri } from "./workspaceIo";
+import { titleFromSource, treeSlugFromSource } from "./forest";
 import { t } from "../i18n";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -130,16 +131,16 @@ export class MdImporter {
       await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(proman, "imports"));
     }
 
-    const parts = [];
+    let totalTasks = 0;
     let planCounter = 1;
-    for (const uri of uris) {
+    for (let i = 0; i < uris.length; i++) {
+      const uri = uris[i];
       const raw = await vscode.workspace.fs.readFile(uri);
       const text = Buffer.from(raw).toString("utf8");
       const rel = vscode.workspace.asRelativePath(uri);
       const parsed = parseMarkdownToTree(text, rel, {
         startCounter: isPlanDocument(text) ? planCounter : 1,
       });
-      parts.push(parsed);
       if (parsed.meta.type?.toLowerCase() === "plan" || isPlanDocument(text)) {
         planCounter = parsed.nextCounter;
       }
@@ -158,16 +159,23 @@ export class MdImporter {
           }
         }
       }
+
+      const treeId = treeSlugFromSource(rel);
+      const title = titleFromSource(rel);
+      this.store.mergeImportTree({
+        treeId,
+        title,
+        sourceFile: rel,
+        roots: parsed.roots,
+        tasks: parsed.tasks,
+        // Keep planningDir on first call (directory import sets it once)
+        planningDir: i === 0 ? planningDir : undefined,
+      });
+      totalTasks += Object.keys(parsed.tasks).length;
     }
-    const merged = mergeParsed(parts);
-    this.store.replaceFromImport({
-      roots: merged.roots,
-      tasks: merged.tasks,
-      planningDir,
-    });
     this.store.applyBlockedStatuses();
     await this.store.save();
-    return Object.keys(merged.tasks).length;
+    return totalTasks;
   }
 
   async importDirectory(dir: vscode.Uri): Promise<number> {

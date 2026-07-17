@@ -6,7 +6,7 @@ Cursor / VS Code extension for managing development with a **task tree** stored 
 
 Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHub Issues bridge — without requiring Jira/Linear.
 
-**Version:** 0.3.13
+**Version:** 0.3.14
 
 ---
 
@@ -32,15 +32,19 @@ Project data:
 
 ```
 .proman/
-  project.json      # meta, team, sync, github
-  tree.json         # tasks
-  edges.json        # dependencies
-  history.json      # local change history
-  comments/         # comments per task id
+  project.json      # meta, team, sync, github, trees[]
+  trees/            # one tree per imported MD/plan
+    <slug>.json
+  tree.json         # flattened snapshot of all trees (MCP/compat)
+  edges.json
+  history.json
+  comments/
   prompts/
-  imports/
+  imports/          # copies of source MD
   proposals/
 ```
+
+Each imported file becomes a **section** in the Proman panel. Statuses live in `trees/<slug>.json` across reopen; re-import/sync **merges** MD structure while preserving `status` / assignee.
 
 In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 

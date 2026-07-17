@@ -54,6 +54,19 @@ export async function wsMkdir(workspaceRoot: string, ...parts: string[]): Promis
   return true;
 }
 
+export async function wsReadDir(
+  workspaceRoot: string,
+  ...parts: string[]
+): Promise<Array<[string, vscode.FileType]> | null> {
+  const full = resolveInside(workspaceRoot, ...parts);
+  if (!full) return null;
+  try {
+    return await vscode.workspace.fs.readDirectory(vscode.Uri.file(full));
+  } catch {
+    return null;
+  }
+}
+
 /** Read any file URI (e.g. extension bundle) via workspace.fs */
 export async function wsReadUri(uri: vscode.Uri): Promise<Uint8Array> {
   return vscode.workspace.fs.readFile(uri);

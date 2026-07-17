@@ -5,7 +5,7 @@ import { AgentHandoff } from "./agent/handoff";
 import { MdImporter } from "./core/planDiscoverer";
 import { PromanMcpServer } from "./mcp/promanMcp";
 import { runOnboarding } from "./onboarding";
-import { PromanTreeItem, PromanTreeProvider, PromanDecorationProvider } from "./tree/promanTree";
+import { PromanTreeItem, PromanTreeProvider, PromanDecorationProvider, PromanNode, PromanSectionItem } from "./tree/promanTree";
 import { runTreeSearch } from "./tree/treeSearch";
 import { TaskDetailPanel } from "./taskDetailPanel";
 import { startDriveMode, startProposalWatcher } from "./driveUi";
@@ -157,10 +157,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
   };
 
-  const taskIdFromArg = (arg?: PromanTreeItem | string): string | undefined => {
+  const taskIdFromArg = (arg?: PromanNode | PromanTreeItem | string): string | undefined => {
     if (!arg) return tree.getSelectedId() ?? undefined;
     if (typeof arg === "string") return arg;
-    return arg.task.id;
+    if (arg instanceof PromanSectionItem || (arg as PromanNode).kind === "section") {
+      return undefined;
+    }
+    return (arg as PromanTreeItem).task?.id;
   };
 
   mcp.registerWithCursor(context);
@@ -178,7 +181,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     treeView.onDidChangeSelection((e) => {
       const item = e.selection[0];
-      if (item) openDetails(item.task.id);
+      if (item && item.kind === "task") openDetails(item.task.id);
     })
   );
 
@@ -370,14 +373,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await store.save();
       refreshUi();
     }),
-    vscode.commands.registerCommand("proman.addRootTask", async () => {
+    vscode.commands.registerCommand("proman.addRootTask", async (item?: PromanNode) => {
       await store.ensureInitialized();
+      const section = item?.kind === "section" ? item : undefined;
+      if (section) {
+        try {
+          store.setActiveTree(section.treeId);
+        } catch {
+          /* ignore */
+        }
+      }
       const title = await vscode.window.showInputBox({
         prompt: t("Root task title"),
         placeHolder: t("e.g. Auth refactor"),
       });
       if (!title) return;
-      const task = store.addTask(null, title);
+      const task = store.addTask(
+        null,
+        title,
+        section ? { treeId: section.treeId } : undefined
+      );
       await store.save();
       await createIssueForTask(store, task.id);
       refreshUi();

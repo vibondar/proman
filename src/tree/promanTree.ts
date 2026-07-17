@@ -47,12 +47,35 @@ function formatSp(n: number): string {
   return Number.isInteger(n) ? String(n) : String(n);
 }
 
+export class PromanSectionItem extends vscode.TreeItem {
+  readonly kind = "section" as const;
+  constructor(
+    public readonly treeId: string,
+    title: string,
+    taskCount: number,
+    sourceFile?: string
+  ) {
+    super(title, vscode.TreeItemCollapsibleState.Expanded);
+    this.id = `section:${treeId}`;
+    this.contextValue = "promanTreeSection";
+    this.iconPath = new vscode.ThemeIcon("list-tree");
+    this.description = String(taskCount);
+    this.tooltip = sourceFile
+      ? `${title}\n${sourceFile}\n${taskCount} tasks`
+      : `${title}\n${taskCount} tasks`;
+  }
+}
+
+export type PromanNode = PromanSectionItem | PromanTreeItem;
+
 export class PromanTreeItem extends vscode.TreeItem {
+  readonly kind = "task" as const;
   constructor(
     public readonly task: TaskNode,
     collapsible: vscode.TreeItemCollapsibleState,
     public readonly highlight: HighlightRole = "none",
-    public readonly rollupSp = 0
+    public readonly rollupSp = 0,
+    public readonly treeId?: string
   ) {
     super(task.title, collapsible);
     this.id = task.id;
@@ -142,9 +165,9 @@ function buildParentMap(state: { roots: string[]; tasks: Record<string, TaskNode
   return parentOf;
 }
 
-export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeItem> {
+export class PromanTreeProvider implements vscode.TreeDataProvider<PromanNode> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<
-    PromanTreeItem | undefined | null | void
+    PromanNode | undefined | null | void
   >();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private selectedId: string | null = null;
@@ -264,61 +287,129 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
 
   private makeItem(
     task: TaskNode,
-    collapsible: vscode.TreeItemCollapsibleState
+    collapsible: vscode.TreeItemCollapsibleState,
+    treeId?: string
   ): PromanTreeItem {
     const state = this.store.current;
     const rollup = state ? subtreeEstimateSp(state.tasks, task.id) : 0;
-    return new PromanTreeItem(task, collapsible, this.roleFor(task.id), rollup);
+    return new PromanTreeItem(task, collapsible, this.roleFor(task.id), rollup, treeId);
   }
 
-  getTreeItem(element: PromanTreeItem): vscode.TreeItem {
+  getTreeItem(element: PromanNode): vscode.TreeItem {
     return element;
   }
 
-  getParent(element: PromanTreeItem): PromanTreeItem | undefined {
+  getParent(element: PromanNode): PromanNode | undefined {
     const state = this.store.current;
     if (!state) return undefined;
+    if (element.kind === "section") return undefined;
     const parentId = Object.values(state.tasks).find((t) =>
       t.children.includes(element.task.id)
     )?.id;
-    if (!parentId) return undefined;
+    if (!parentId) {
+      const treeId =
+        element.treeId ??
+        state.trees.find((tr) => tr.tasks[element.task.id])?.id;
+      if (!treeId) return undefined;
+      const tree = state.trees.find((tr) => tr.id === treeId);
+      if (!tree) return undefined;
+      return new PromanSectionItem(
+        tree.id,
+        tree.title,
+        Object.keys(tree.tasks).length,
+        tree.sourceFile
+      );
+    }
     const parent = state.tasks[parentId];
     if (!parent) return undefined;
-    return this.makeItem(parent, vscode.TreeItemCollapsibleState.Expanded);
+    const treeId =
+      element.treeId ?? state.trees.find((tr) => tr.tasks[parentId])?.id;
+    return this.makeItem(parent, vscode.TreeItemCollapsibleState.Expanded, treeId);
   }
 
-  getChildren(element?: PromanTreeItem): PromanTreeItem[] {
+  getChildren(element?: PromanNode): PromanNode[] {
     const state = this.store.current;
-    if (!state) {
-      return [];
+    if (!state) return [];
+
+    if (!element) {
+      const trees = state.trees.length
+        ? state.trees
+        : [
+            {
+              id: "main",
+              title: state.meta.name || "Main",
+              roots: state.roots,
+              tasks: state.tasks,
+              edges: state.edges,
+              updatedAt: state.meta.updatedAt,
+            },
+          ];
+      return trees
+        .filter((tr) => {
+          if (!this.visibleIds) return true;
+          return Object.keys(tr.tasks).some((id) => this.visibleIds!.has(id));
+        })
+        .map(
+          (tr) =>
+            new PromanSectionItem(
+              tr.id,
+              tr.title,
+              Object.keys(tr.tasks).length,
+              tr.sourceFile
+            )
+        );
     }
-    const ids = element ? element.task.children : state.roots;
-    return ids
+
+    if (element.kind === "section") {
+      const tree = state.trees.find((tr) => tr.id === element.treeId);
+      const roots = tree?.roots ?? state.roots;
+      const tasks = tree?.tasks ?? state.tasks;
+      return roots
+        .map((id) => tasks[id] ?? state.tasks[id])
+        .filter(Boolean)
+        .filter((task) => !this.visibleIds || this.visibleIds.has(task.id))
+        .map((task) => {
+          const filteredChildren = task.children.filter(
+            (id) => !this.visibleIds || this.visibleIds.has(id)
+          );
+          const collapsible =
+            filteredChildren.length > 0
+              ? vscode.TreeItemCollapsibleState.Expanded
+              : vscode.TreeItemCollapsibleState.None;
+          return this.makeItem(task, collapsible, element.treeId);
+        });
+    }
+
+    const task = element.task;
+    return task.children
       .map((id) => state.tasks[id])
       .filter(Boolean)
-      .filter((task) => !this.visibleIds || this.visibleIds.has(task.id))
-      .map((task) => {
-        const filteredChildren = task.children.filter(
+      .filter((t) => !this.visibleIds || this.visibleIds.has(t.id))
+      .map((t) => {
+        const filteredChildren = t.children.filter(
           (id) => !this.visibleIds || this.visibleIds.has(id)
         );
         const collapsible =
           filteredChildren.length > 0
             ? vscode.TreeItemCollapsibleState.Expanded
             : vscode.TreeItemCollapsibleState.None;
-        return this.makeItem(task, collapsible);
+        return this.makeItem(t, collapsible, element.treeId);
       });
   }
 
   /** Build item for reveal() */
   itemForId(taskId: string): PromanTreeItem | undefined {
-    const task = this.store.current?.tasks[taskId];
-    if (!task) return undefined;
+    const state = this.store.current;
+    const task = state?.tasks[taskId];
+    if (!task || !state) return undefined;
+    const treeId = state.trees.find((tr) => tr.tasks[taskId])?.id;
     const hasKids = task.children.some((id) => !this.visibleIds || this.visibleIds.has(id));
     return this.makeItem(
       task,
       hasKids
         ? vscode.TreeItemCollapsibleState.Expanded
-        : vscode.TreeItemCollapsibleState.None
+        : vscode.TreeItemCollapsibleState.None,
+      treeId
     );
   }
 

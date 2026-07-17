@@ -1,39 +1,96 @@
-import { TaskNode, TaskStatus, ProjectState } from "../core/types";
+import { TaskNode, TaskStatus, ProjectState, TreeBundle } from "../core/types";
 import { isSafeId } from "./pathSafety";
 import { parseStructureOps, StructureOp } from "./proposalOps";
-import { wsExists, wsMkdir, wsReadText, wsWriteText } from "./workspaceIo";
+import { wsExists, wsMkdir, wsReadDir, wsReadText, wsWriteText } from "./workspaceIo";
+import {
+  edgesFromTasks,
+  flattenForest,
+  legacyToForest,
+  projectStateFromForest,
+  pullFlatIntoForest,
+  syncMetaTrees,
+} from "./forest";
+import { normalizeProjectMeta } from "./projectMeta";
 
 const PROMAN = ".proman";
 
 export async function loadProjectState(workspaceRoot: string): Promise<ProjectState | null> {
   const metaText = await wsReadText(workspaceRoot, PROMAN, "project.json");
+  if (!metaText) return null;
+  const meta = normalizeProjectMeta(JSON.parse(metaText));
+
+  const trees: TreeBundle[] = [];
+  const dir = await wsReadDir(workspaceRoot, PROMAN, "trees");
+  if (dir) {
+    for (const [name, type] of dir) {
+      if ((type as number) !== 1) continue; // File
+      if (!name.endsWith(".json")) continue;
+      const text = await wsReadText(workspaceRoot, PROMAN, "trees", name);
+      if (!text) continue;
+      try {
+        const raw = JSON.parse(text) as TreeBundle;
+        if (!raw?.id || !raw.tasks) continue;
+        trees.push({
+          id: raw.id,
+          title: raw.title || raw.id,
+          sourceFile: raw.sourceFile,
+          roots: raw.roots ?? [],
+          tasks: raw.tasks ?? {},
+          edges: raw.edges ?? edgesFromTasks(raw.tasks ?? {}),
+          updatedAt: raw.updatedAt || meta.updatedAt,
+        });
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  if (trees.length) {
+    return projectStateFromForest(meta, trees);
+  }
+
   const treeText = await wsReadText(workspaceRoot, PROMAN, "tree.json");
-  if (!metaText || !treeText) return null;
-  const meta = JSON.parse(metaText);
+  if (!treeText) return null;
   const tree = JSON.parse(treeText);
   let edges = [];
   const edgesText = await wsReadText(workspaceRoot, PROMAN, "edges.json");
-  if (edgesText) {
-    edges = JSON.parse(edgesText);
-  }
-  return {
+  if (edgesText) edges = JSON.parse(edgesText);
+  return projectStateFromForest(
     meta,
-    roots: tree.roots ?? [],
-    tasks: tree.tasks ?? {},
-    edges,
-  };
+    legacyToForest(meta, tree.roots ?? [], tree.tasks ?? {}, edges)
+  );
 }
 
 export async function saveProjectState(workspaceRoot: string, state: ProjectState): Promise<void> {
   await wsMkdir(workspaceRoot, PROMAN, "prompts");
   await wsMkdir(workspaceRoot, PROMAN, "imports");
   await wsMkdir(workspaceRoot, PROMAN, "proposals");
+  await wsMkdir(workspaceRoot, PROMAN, "trees");
   state.meta.updatedAt = new Date().toISOString();
+  if (!state.trees?.length) {
+    state.trees = legacyToForest(state.meta, state.roots, state.tasks, state.edges ?? []);
+  }
+  pullFlatIntoForest(state);
+  state.meta = syncMetaTrees(state.meta, state.trees);
+  const flat = flattenForest(state.trees);
+  state.roots = flat.roots;
+  state.tasks = flat.tasks;
+  state.edges = flat.edges;
+
   const okMeta = await wsWriteText(
     workspaceRoot,
     [PROMAN, "project.json"],
     JSON.stringify(state.meta, null, 2)
   );
+  let okTrees = true;
+  for (const tree of state.trees) {
+    const ok = await wsWriteText(
+      workspaceRoot,
+      [PROMAN, "trees", `${tree.id}.json`],
+      JSON.stringify(tree, null, 2)
+    );
+    if (!ok) okTrees = false;
+  }
   const okTree = await wsWriteText(
     workspaceRoot,
     [PROMAN, "tree.json"],
@@ -44,7 +101,7 @@ export async function saveProjectState(workspaceRoot: string, state: ProjectStat
     [PROMAN, "edges.json"],
     JSON.stringify(state.edges ?? [], null, 2)
   );
-  if (!okMeta || !okTree || !okEdges) {
+  if (!okMeta || !okTrees || !okTree || !okEdges) {
     throw new Error("Failed to save .proman state inside workspace");
   }
 }

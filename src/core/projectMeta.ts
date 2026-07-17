@@ -57,6 +57,20 @@ export function normalizeProjectMeta(raw: ProjectMeta): ProjectMeta {
     if (isGithubIssuesEnabled(normalized)) meta.github = normalized;
     else delete meta.github;
   }
+
+  if (Array.isArray(meta.trees)) {
+    meta.trees = meta.trees
+      .filter((t) => t && typeof t.id === "string" && t.id.trim())
+      .map((t) => ({
+        id: t.id.trim(),
+        title: typeof t.title === "string" && t.title.trim() ? t.title.trim() : t.id,
+        sourceFile: typeof t.sourceFile === "string" ? t.sourceFile : undefined,
+        updatedAt: typeof t.updatedAt === "string" ? t.updatedAt : undefined,
+      }));
+  }
+  if (typeof meta.activeTreeId === "string") {
+    meta.activeTreeId = meta.activeTreeId.trim() || undefined;
+  }
   return meta;
 }
 

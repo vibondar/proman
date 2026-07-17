@@ -3,23 +3,33 @@ import * as path from "path";
 import { ProjectStore } from "./core/store";
 
 /**
- * Watch .proman/tree.json so Agent MCP status writes refresh the sidebar automatically.
+ * Watch .proman/tree.json and .proman/trees/*.json so Agent MCP status writes
+ * refresh the sidebar automatically.
  */
 export function startTreeFileWatcher(
   store: ProjectStore,
   onReload: () => void
 ): vscode.Disposable {
-  let watcher: vscode.FileSystemWatcher | undefined;
+  let watchers: vscode.FileSystemWatcher[] = [];
   let timer: NodeJS.Timeout | undefined;
   let ignoreUntil = 0;
 
   const attach = () => {
-    watcher?.dispose();
+    for (const w of watchers) w.dispose();
+    watchers = [];
     const root = store.workspaceRoot;
     if (!root) return;
-    const treeFile = path.join(root, ".proman", "tree.json");
-    const pattern = new vscode.RelativePattern(path.dirname(treeFile), "{tree,edges,project}.json");
-    watcher = vscode.workspace.createFileSystemWatcher(pattern);
+    const pattern = new vscode.RelativePattern(
+      path.join(root, ".proman"),
+      "{tree,edges,project}.json"
+    );
+    const treesPattern = new vscode.RelativePattern(
+      path.join(root, ".proman", "trees"),
+      "*.json"
+    );
+    const main = vscode.workspace.createFileSystemWatcher(pattern);
+    const trees = vscode.workspace.createFileSystemWatcher(treesPattern);
+    watchers = [main, trees];
 
     const schedule = () => {
       if (Date.now() < ignoreUntil) return;
@@ -34,25 +44,26 @@ export function startTreeFileWatcher(
       }, 250);
     };
 
-    watcher.onDidChange(schedule);
-    watcher.onDidCreate(schedule);
+    for (const w of watchers) {
+      w.onDidChange(schedule);
+      w.onDidCreate(schedule);
+      w.onDidDelete(schedule);
+    }
   };
 
   attach();
   const folderSub = vscode.workspace.onDidChangeWorkspaceFolders(() => attach());
 
-  // When we save from the extension, skip echo for a short window (optional)
   const markSelfWrite = () => {
     ignoreUntil = Date.now() + 400;
   };
 
   return {
     dispose: () => {
-      watcher?.dispose();
+      for (const w of watchers) w.dispose();
       folderSub.dispose();
       if (timer) clearTimeout(timer);
     },
-    // exposed for store hooks if needed later
     markSelfWrite,
   } as vscode.Disposable & { markSelfWrite: () => void };
 }

@@ -38,21 +38,122 @@ function promanDir() {
 
 function loadState() {
   const metaPath = path.join(promanDir(), "project.json");
-  const treePath = path.join(promanDir(), "tree.json");
-  if (!fs.existsSync(metaPath) || !fs.existsSync(treePath)) return null;
+  if (!fs.existsSync(metaPath)) return null;
   const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+  const treesDir = path.join(promanDir(), "trees");
+  const trees = [];
+  if (fs.existsSync(treesDir)) {
+    for (const name of fs.readdirSync(treesDir)) {
+      if (!name.endsWith(".json")) continue;
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(treesDir, name), "utf8"));
+        if (raw?.id && raw.tasks) trees.push(raw);
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  if (trees.length) {
+    const tasks = {};
+    const roots = [];
+    for (const tree of trees) {
+      Object.assign(tasks, tree.tasks || {});
+      for (const r of tree.roots || []) {
+        if (tasks[r] && !roots.includes(r)) roots.push(r);
+      }
+    }
+    return { meta, roots, tasks, edges: [], trees };
+  }
+  const treePath = path.join(promanDir(), "tree.json");
+  if (!fs.existsSync(treePath)) return null;
   const tree = JSON.parse(fs.readFileSync(treePath, "utf8"));
   let edges = [];
   const edgesPath = path.join(promanDir(), "edges.json");
   if (fs.existsSync(edgesPath)) edges = JSON.parse(fs.readFileSync(edgesPath, "utf8"));
-  return { meta, roots: tree.roots || [], tasks: tree.tasks || {}, edges };
+  return {
+    meta,
+    roots: tree.roots || [],
+    tasks: tree.tasks || {},
+    edges,
+    trees: [
+      {
+        id: "main",
+        title: meta.name || "Main",
+        roots: tree.roots || [],
+        tasks: tree.tasks || {},
+        edges,
+        updatedAt: meta.updatedAt,
+      },
+    ],
+  };
+}
+
+function pullFlatIntoTrees(state) {
+  if (!state.trees?.length) {
+    state.trees = [
+      {
+        id: "main",
+        title: state.meta?.name || "Main",
+        roots: state.roots || [],
+        tasks: { ...(state.tasks || {}) },
+        edges: state.edges || [],
+        updatedAt: new Date().toISOString(),
+      },
+    ];
+    return;
+  }
+  const claimed = new Set();
+  for (const tree of state.trees) {
+    const next = {};
+    for (const id of Object.keys(tree.tasks || {})) {
+      if (state.tasks[id]) {
+        next[id] = state.tasks[id];
+        claimed.add(id);
+      }
+    }
+    for (const [id, t] of Object.entries(state.tasks || {})) {
+      if (claimed.has(id)) continue;
+      if (id.startsWith(tree.id + "_")) {
+        next[id] = t;
+        claimed.add(id);
+      }
+    }
+    tree.tasks = next;
+    tree.roots = Object.keys(next).filter(
+      (id) => !Object.values(next).some((t) => (t.children || []).includes(id))
+    );
+    tree.updatedAt = new Date().toISOString();
+  }
+  const orphans = Object.keys(state.tasks || {}).filter((id) => !claimed.has(id));
+  if (orphans.length) {
+    let tree = state.trees.find((t) => t.id === state.meta?.activeTreeId) || state.trees[0];
+    for (const id of orphans) tree.tasks[id] = state.tasks[id];
+    tree.roots = Object.keys(tree.tasks).filter(
+      (id) => !Object.values(tree.tasks).some((t) => (t.children || []).includes(id))
+    );
+    tree.updatedAt = new Date().toISOString();
+  }
 }
 
 function saveState(state) {
   const dir = promanDir();
   fs.mkdirSync(path.join(dir, "proposals"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "trees"), { recursive: true });
   state.meta.updatedAt = new Date().toISOString();
+  pullFlatIntoTrees(state);
+  state.meta.trees = (state.trees || []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    sourceFile: t.sourceFile,
+    updatedAt: t.updatedAt,
+  }));
+  if (!state.meta.activeTreeId && state.trees?.[0]) {
+    state.meta.activeTreeId = state.trees[0].id;
+  }
   fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify(state.meta, null, 2));
+  for (const tree of state.trees || []) {
+    fs.writeFileSync(path.join(dir, "trees", `${tree.id}.json`), JSON.stringify(tree, null, 2));
+  }
   fs.writeFileSync(
     path.join(dir, "tree.json"),
     JSON.stringify({ roots: state.roots, tasks: state.tasks }, null, 2)
@@ -71,10 +172,13 @@ function applyBlocked(state) {
   }
 }
 
-function nextActionable(state) {
+function nextActionable(state, treeId) {
   const queue = [];
+  const tree = treeId ? (state.trees || []).find((t) => t.id === treeId) : null;
+  const roots = tree ? tree.roots || [] : state.roots;
+  const tasks = tree ? { ...state.tasks, ...(tree.tasks || {}) } : state.tasks;
   const visit = (id) => {
-    const t = state.tasks[id];
+    const t = tasks[id] || state.tasks[id];
     if (!t) return;
     for (const c of t.children || []) visit(c);
     if (
@@ -83,17 +187,17 @@ function nextActionable(state) {
       t.status === "in_progress" ||
       t.status === "needs_rework"
     ) {
-      const unmet = (t.dependsOn || []).filter((d) => state.tasks[d]?.status !== "done");
+      const unmet = (t.dependsOn || []).filter((d) => (state.tasks[d] || tasks[d])?.status !== "done");
       if (!unmet.length) queue.push({ id: t.id, title: t.title, status: t.status });
     }
   };
-  for (const r of state.roots) visit(r);
+  for (const r of roots) visit(r);
   const inProg = queue.find((q) => q.status === "in_progress");
-  if (inProg) return { task: state.tasks[inProg.id], reason: "continue in_progress", queue };
+  if (inProg) return { task: state.tasks[inProg.id], reason: "continue in_progress", queue, treeId: treeId || null };
   const rework = queue.find((q) => q.status === "needs_rework");
-  if (rework) return { task: state.tasks[rework.id], reason: "needs_rework", queue };
-  if (queue.length) return { task: state.tasks[queue[0].id], reason: "next todo", queue };
-  return { task: null, reason: "none", queue };
+  if (rework) return { task: state.tasks[rework.id], reason: "needs_rework", queue, treeId: treeId || null };
+  if (queue.length) return { task: state.tasks[queue[0].id], reason: "next todo", queue, treeId: treeId || null };
+  return { task: null, reason: "none", queue, treeId: treeId || null };
 }
 
 function text(data) {
@@ -114,11 +218,40 @@ const server = new McpServer({
   version: "0.3.3",
 });
 
-server.tool("proman_get_tree", "Snapshot of Proman task tree from .proman/", {}, async () => {
-  const state = loadState();
-  if (!state) return err(`no .proman in ${workspace}`);
-  return text({ meta: state.meta, roots: state.roots, tasks: state.tasks, workspace });
-});
+server.tool(
+  "proman_get_tree",
+  "Snapshot of Proman task tree(s) from .proman/",
+  { treeId: z.string().optional() },
+  async ({ treeId }) => {
+    const state = loadState();
+    if (!state) return err(`no .proman in ${workspace}`);
+    if (treeId) {
+      const tree = (state.trees || []).find((t) => t.id === treeId);
+      if (!tree) return err(`tree not found: ${treeId}`);
+      return text({
+        meta: state.meta,
+        treeId,
+        title: tree.title,
+        roots: tree.roots,
+        tasks: tree.tasks,
+        trees: (state.trees || []).map((t) => ({ id: t.id, title: t.title, sourceFile: t.sourceFile })),
+        workspace,
+      });
+    }
+    return text({
+      meta: state.meta,
+      roots: state.roots,
+      tasks: state.tasks,
+      trees: (state.trees || []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        sourceFile: t.sourceFile,
+        roots: t.roots,
+      })),
+      workspace,
+    });
+  }
+);
 
 server.tool(
   "proman_get_task",
@@ -139,12 +272,13 @@ server.tool(
 
 server.tool(
   "proman_next_actionable",
-  "Next unblocked todo/new/in_progress/needs_rework task for Drive Mode",
-  {},
-  async () => {
+  "Next unblocked todo/new/in_progress/needs_rework task for Drive Mode (optional treeId)",
+  { treeId: z.string().optional() },
+  async ({ treeId }) => {
     const state = loadState();
     if (!state) return err("no project");
-    return text({ ...nextActionable(state), workspace });
+    const active = treeId || state.meta?.activeTreeId;
+    return text({ ...nextActionable(state, active), workspace });
   }
 );
 

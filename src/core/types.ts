@@ -95,6 +95,24 @@ export interface GithubIssuesConfig {
   publicOnly?: boolean;
 }
 
+export interface TreeDescriptor {
+  id: string;
+  title: string;
+  /** Relative path or imports basename that produced this tree */
+  sourceFile?: string;
+  updatedAt?: string;
+}
+
+export interface TreeBundle {
+  id: string;
+  title: string;
+  sourceFile?: string;
+  roots: string[];
+  tasks: Record<string, TaskNode>;
+  edges: DependencyEdge[];
+  updatedAt: string;
+}
+
 export interface ProjectMeta {
   name: string;
   planningDir?: string;
@@ -107,11 +125,20 @@ export interface ProjectMeta {
   team?: TeamConfig;
   sync?: SyncConfig;
   github?: GithubIssuesConfig;
+  /** Registry of task trees (one per imported plan / MD file). */
+  trees?: TreeDescriptor[];
+  /** Preferred tree for new root tasks / Drive default. */
+  activeTreeId?: string;
 }
 
 export interface ProjectState {
   meta: ProjectMeta;
-  /** Root task ids */
+  /** Per-import / per-plan trees (source of truth on disk under .proman/trees/). */
+  trees: TreeBundle[];
+  /**
+   * Flattened view of all trees (unique task ids). Kept for engines/UI helpers;
+   * persisted also as legacy tree.json for MCP.
+   */
   roots: string[];
   tasks: Record<string, TaskNode>;
   edges: DependencyEdge[];

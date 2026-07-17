@@ -311,8 +311,31 @@ export class PromanMcpServer {
   private getTree(rootId?: string) {
     const state = this.store.current;
     if (!state) return { error: "no project" };
+    const trees = state.trees.map((t) => ({
+      id: t.id,
+      title: t.title,
+      sourceFile: t.sourceFile,
+      roots: t.roots,
+    }));
     if (!rootId) {
-      return { meta: state.meta, roots: state.roots, tasks: state.tasks, progress: this.store.progress() };
+      return {
+        meta: state.meta,
+        roots: state.roots,
+        tasks: state.tasks,
+        trees,
+        progress: this.store.progress(),
+      };
+    }
+    const asTree = state.trees.find((t) => t.id === rootId);
+    if (asTree) {
+      return {
+        treeId: asTree.id,
+        title: asTree.title,
+        roots: asTree.roots,
+        tasks: asTree.tasks,
+        trees,
+        progress: this.store.progress(),
+      };
     }
     const tasks: Record<string, TaskNode> = {};
     const collect = (id: string) => {
@@ -322,7 +345,7 @@ export class PromanMcpServer {
       for (const c of t.children) collect(c);
     };
     collect(rootId);
-    return { rootId, tasks, progress: this.store.progress(rootId) };
+    return { rootId, tasks, trees, progress: this.store.progress(rootId) };
   }
 
   private getTask(taskId: string) {

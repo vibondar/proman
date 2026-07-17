@@ -6,7 +6,7 @@
 
 Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
 
-**Версия:** 0.3.13
+**Версия:** 0.3.14
 
 ---
 
@@ -32,15 +32,19 @@
 
 ```
 .proman/
-  project.json      # meta, team, sync, github
-  tree.json         # задачи
-  edges.json        # зависимости
-  history.json      # локальная история изменений
-  comments/         # комментарии по task id
+  project.json      # meta, team, sync, github, trees[]
+  trees/            # одно дерево на импортированный MD/план
+    <slug>.json
+  tree.json         # плоский снимок всех деревьев (MCP/совместимость)
+  edges.json
+  history.json
+  comments/
   prompts/
-  imports/
+  imports/          # копии исходных MD
   proposals/
 ```
+
+Каждый файл из импорта → отдельная **секция** в панели Proman. Статусы пишутся в `trees/<slug>.json` и переживают reopen; повторный Import/Sync **мержит** структуру из MD, сохраняя `status` / assignee.
 
 В **командном** репозитории коммитьте `.proman/` (не добавляйте его в `.gitignore`).
 
