@@ -60,6 +60,21 @@ export async function wsWriteTreeJson(
   return true;
 }
 
+/** Delete `.proman/trees/<safeId>.json` if present. */
+export async function wsDeleteTreeJson(
+  workspaceRoot: string,
+  treeId: string
+): Promise<boolean> {
+  const full = resolveTreeJsonPath(workspaceRoot, treeId);
+  if (!full) return false;
+  try {
+    await vscode.workspace.fs.delete(vscode.Uri.file(full));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function wsMkdir(workspaceRoot: string, ...parts: string[]): Promise<boolean> {
   const full = resolveInside(workspaceRoot, ...parts);
   if (!full) return false;

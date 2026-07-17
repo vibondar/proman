@@ -161,6 +161,16 @@
         "icon": "$(trash)"
       },
       {
+        "command": "proman.deleteTree",
+        "title": "%proman.command.deleteTree.title%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "proman.exportTreeMd",
+        "title": "%proman.command.exportTreeMd.title%",
+        "icon": "$(export)"
+      },
+      {
         "command": "proman.openTaskDetails",
         "title": "%proman.command.openTaskDetails.title%",
         "icon": "$(edit)"
@@ -247,6 +257,26 @@
           "command": "proman.addRootTask",
           "when": "view == proman.tree && viewItem == promanTreeSection",
           "group": "inline@1"
+        },
+        {
+          "command": "proman.exportTreeMd",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "inline@2"
+        },
+        {
+          "command": "proman.deleteTree",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "inline@3"
+        },
+        {
+          "command": "proman.exportTreeMd",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "1_edit"
+        },
+        {
+          "command": "proman.deleteTree",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "9_danger"
         },
         {
           "command": "proman.openTaskDetails",

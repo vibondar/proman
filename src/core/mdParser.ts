@@ -1,6 +1,7 @@
 import { TaskNode, TaskStatus } from "./types";
 import { extractFrontmatter } from "./planFrontmatter";
 import { enrichAllTasks } from "./taskMeta";
+import { applyStatusFromDescription } from "./mdExport";
 
 export interface ParsedMdResult {
   roots: string[];
@@ -170,14 +171,16 @@ export function parseMarkdownToTree(
 
   for (const t of Object.values(tasks)) {
     const extra = (t as TaskNode & { _depTitles?: string[] })._depTitles;
-    if (!extra) continue;
-    for (const title of extra) {
-      const id = titleToId.get(title.toLowerCase());
-      if (id && id !== t.id && !t.dependsOn.includes(id)) {
-        t.dependsOn.push(id);
+    if (extra) {
+      for (const title of extra) {
+        const id = titleToId.get(title.toLowerCase());
+        if (id && id !== t.id && !t.dependsOn.includes(id)) {
+          t.dependsOn.push(id);
+        }
       }
+      delete (t as TaskNode & { _depTitles?: string[] })._depTitles;
     }
-    delete (t as TaskNode & { _depTitles?: string[] })._depTitles;
+    applyStatusFromDescription(t);
   }
 
   if (roots.length === 0) {

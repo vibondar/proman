@@ -51,6 +51,21 @@ describe("parseMarkdownToTree", () => {
     expect(r.roots).toHaveLength(1);
     expect(r.tasks[r.roots[0]].title).toBe("Empty");
   });
+  it("applies Status line for non-checkbox progress", () => {
+    const md = [
+      "---",
+      "type: plan",
+      "---",
+      "# Epic",
+      "- [ ] Task A",
+      "Status: in_progress",
+      "- [x] Task B",
+      "Status: todo",
+    ].join("\n");
+    const r = parseMarkdownToTree(md, "docs/plan.md");
+    expect(r.tasks.plan_2.status).toBe("in_progress");
+    expect(r.tasks.plan_3.status).toBe("done"); // checkbox wins
+  });
 });
 
 describe("mergeParsed", () => {

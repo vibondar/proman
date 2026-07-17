@@ -26,6 +26,8 @@
   "proman.command.addRootTask.title": "Proman: Add Root Task",
   "proman.command.addChildTask.title": "Proman: Add Child Task",
   "proman.command.deleteTask.title": "Proman: Delete Task",
+  "proman.command.deleteTree.title": "Proman: Delete Task Tree",
+  "proman.command.exportTreeMd.title": "Proman: Export Tree to Markdown",
   "proman.command.openTaskDetails.title": "Proman: Open Task Details",
   "proman.command.setStatusTodo.title": "Proman: Status → todo",
   "proman.command.setStatusNew.title": "Proman: Status → new (blue)",

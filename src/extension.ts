@@ -25,6 +25,7 @@ import {
   syncClosedGithubIssues,
 } from "./githubSync";
 import { t } from "./i18n";
+import { exportTreeToMarkdown, suggestedExportBasename } from "./core/mdExport";
 
 let planningWatcher: vscode.FileSystemWatcher | undefined;
 
@@ -442,6 +443,77 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await store.save();
       tree.setSelectedId(null);
       refreshUi();
+    }),
+    vscode.commands.registerCommand("proman.deleteTree", async (item?: PromanNode) => {
+      const section =
+        item instanceof PromanSectionItem || item?.kind === "section"
+          ? (item as PromanSectionItem)
+          : undefined;
+      if (!section) {
+        vscode.window.showWarningMessage(t("Select a task tree section"));
+        return;
+      }
+      if (!store.current) return;
+      const bundle = store.getTree(section.treeId);
+      if (!bundle) {
+        vscode.window.showWarningMessage(t("Tree not found"));
+        return;
+      }
+      const deleteBtn = t("Delete tree");
+      const ok = await vscode.window.showWarningMessage(
+        t(
+          "Delete task tree “{0}”? All progress marked in this tree will not be saved.",
+          bundle.title || bundle.id
+        ),
+        { modal: true },
+        deleteBtn
+      );
+      if (ok !== deleteBtn) return;
+      try {
+        await store.deleteTree(section.treeId);
+        tree.setSelectedId(null);
+        refreshUi();
+        vscode.window.showInformationMessage(
+          t("Proman: deleted tree “{0}”", bundle.title || bundle.id)
+        );
+      } catch (e) {
+        vscode.window.showErrorMessage(
+          t("Proman: {0}", e instanceof Error ? e.message : String(e))
+        );
+      }
+    }),
+    vscode.commands.registerCommand("proman.exportTreeMd", async (item?: PromanNode) => {
+      const section =
+        item instanceof PromanSectionItem || item?.kind === "section"
+          ? (item as PromanSectionItem)
+          : undefined;
+      if (!section) {
+        vscode.window.showWarningMessage(t("Select a task tree section"));
+        return;
+      }
+      if (!store.current) return;
+      const bundle = store.getTree(section.treeId);
+      if (!bundle) {
+        vscode.window.showWarningMessage(t("Tree not found"));
+        return;
+      }
+      const md = exportTreeToMarkdown(bundle);
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      const defaultUri = folder
+        ? vscode.Uri.joinPath(folder.uri, suggestedExportBasename(bundle))
+        : vscode.Uri.file(suggestedExportBasename(bundle));
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters: { Markdown: ["md"] },
+        saveLabel: t("Export"),
+        title: t("Export tree to Markdown"),
+      });
+      if (!uri) return;
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(md, "utf8"));
+      vscode.window.showInformationMessage(
+        t("Proman: exported “{0}” with current progress", bundle.title || bundle.id)
+      );
+      await vscode.window.showTextDocument(uri);
     }),
     vscode.commands.registerCommand("proman.setStatusTodo", (item?: PromanTreeItem) =>
       setStatus(store, taskIdFromArg(item), "todo", refreshUi)

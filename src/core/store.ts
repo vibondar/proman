@@ -11,7 +11,14 @@ import {
 } from "./types";
 import { enrichAllTasks, enrichTaskFromDescription, upsertMetaInDescription } from "./taskMeta";
 import { isSafeId, resolvePlanningDir } from "./pathSafety";
-import { wsMkdir, wsReadDir, wsReadText, wsWriteText, wsWriteTreeJson } from "./workspaceIo";
+import {
+  wsDeleteTreeJson,
+  wsMkdir,
+  wsReadDir,
+  wsReadText,
+  wsWriteText,
+  wsWriteTreeJson,
+} from "./workspaceIo";
 import { appendHistory, HistoryEntry, loadHistory, makeHistoryEntry } from "./history";
 import { actorsEqual, displayActor, normalizeActor } from "./actor";
 import {
@@ -528,6 +535,27 @@ export class ProjectStore {
     }
     this.state.meta.activeTreeId = treeId;
     this.state.meta = syncMetaTrees(this.state.meta, this.state.trees);
+  }
+
+  /**
+   * Remove a tree from the forest and delete its JSON on disk.
+   * Progress in that tree is discarded (caller must warn the user).
+   */
+  async deleteTree(treeId: string): Promise<void> {
+    if (!this.state) throw new Error("Project not initialized");
+    if (!isSafeId(treeId) || !findTree(this.state.trees, treeId)) {
+      throw new Error(`Tree ${treeId} not found`);
+    }
+    this.state.trees = this.state.trees.filter((t) => t.id !== treeId);
+    if (this.state.meta.activeTreeId === treeId) {
+      this.state.meta.activeTreeId = this.state.trees[0]?.id;
+    }
+    this.rebuildFlat();
+    const folder = this.folder;
+    if (folder) {
+      await wsDeleteTreeJson(folder.uri.fsPath, treeId);
+    }
+    await this.save();
   }
 
   progress(rootId?: string): TreeProgress {

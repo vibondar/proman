@@ -26,6 +26,8 @@
   "proman.command.addRootTask.title": "Proman: Добавить корневую задачу",
   "proman.command.addChildTask.title": "Proman: Добавить подзадачу",
   "proman.command.deleteTask.title": "Proman: Удалить задачу",
+  "proman.command.deleteTree.title": "Proman: Удалить дерево задач",
+  "proman.command.exportTreeMd.title": "Proman: Экспорт дерева в Markdown",
   "proman.command.openTaskDetails.title": "Proman: Открыть детали задачи",
   "proman.command.setStatusTodo.title": "Proman: Статус → todo",
   "proman.command.setStatusNew.title": "Proman: Статус → new (синяя)",
