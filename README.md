@@ -22,11 +22,16 @@
 
 ## Быстрый старт
 
-1. Установите VSIX (`npm run install:cursor` или Install from VSIX).
-2. Откройте папку проекта → Activity Bar → **Proman**.
-3. Импортируйте MD или добавьте корневую задачу.
-4. (Опционально) `Proman: Set Current User` — кто вы в команде.
-5. (Опционально) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+1. Установите VSIX (`npm run install:cursor` или Install from VSIX) и сделайте **Reload Window**.
+2. Включите MCP-сервер **proman**: Settings → **MCP** → найдите `proman` (или проверьте `.cursor/mcp.json` в проекте) → включите / Restart. Без этого Agent не сможет обновлять статусы через tools `proman_*`.
+3. Откройте папку проекта → Activity Bar → **Proman**.
+4. Импортируйте MD или добавьте корневую задачу.
+5. (Опционально) `Proman: Set Current User` — кто вы в команде.
+6. (Опционально) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+
+### План задач через Cursor
+
+Чтобы Agent сгенерировал список задач в формате, который Proman хорошо импортирует, в чате предложите шаблон [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) (скопируйте файл в проект или дайте ссылку/путь). Попросите Cursor составить roadmap/чеклист **по этому шаблону**, затем **Proman: Import Planning Docs**.
 
 Данные проекта:
 
@@ -64,7 +69,7 @@
 
 - Импорт roadmap / plan / чеклистов → дерево
 - Frontmatter `type: plan` → id `plan_1`, `plan_2`, …
-- Шаблон: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md)
+- Шаблон для генерации списка задач: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — его стоит предлагать Cursor как образец формата
 - Пример meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
 
 ### Agent / Drive Mode
@@ -72,7 +77,7 @@
 - **Run Task in Agent** — промпт в буфер + Agent
 - **Drive Mode** — агент идёт по очереди через MCP `proman_*`
 - Структура дерева меняется только после вашего **Approve**
-- При активации пишется `.cursor/mcp.json` (сервер `proman`)
+- При активации пишется `.cursor/mcp.json` (сервер `proman`); после установки **включите** сервер в Settings → MCP и перезапустите MCP / Reload Window
 
 ### Командная работа (локально)
 

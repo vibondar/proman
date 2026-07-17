@@ -22,11 +22,16 @@ Developers and small teams who want to:
 
 ## Quick start
 
-1. Install the VSIX (`npm run install:cursor` or Install from VSIX).
-2. Open a project folder → Activity Bar → **Proman**.
-3. Import Markdown or add a root task.
-4. (Optional) `Proman: Set Current User` — who you are on the team.
-5. (Optional) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+1. Install the VSIX (`npm run install:cursor` or Install from VSIX) and **Reload Window**.
+2. Enable the **proman** MCP server: Settings → **MCP** → find `proman` (or check `.cursor/mcp.json` in the project) → enable / Restart. Without this, the Agent cannot update statuses via `proman_*` tools.
+3. Open a project folder → Activity Bar → **Proman**.
+4. Import Markdown or add a root task.
+5. (Optional) `Proman: Set Current User` — who you are on the team.
+6. (Optional) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+
+### Planning tasks with Cursor
+
+For a task list that Proman imports cleanly, point Cursor at the template [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) (copy it into the project or give the path). Ask Cursor to draft the roadmap/checklist **using that template**, then run **Proman: Import Planning Docs**.
 
 Project data:
 
@@ -64,7 +69,7 @@ In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 
 - Import roadmap / plan / checklists → tree
 - Frontmatter `type: plan` → ids `plan_1`, `plan_2`, …
-- Template: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md)
+- Template for generating the task list: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — recommend this to Cursor as the format sample
 - Sample meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
 
 ### Agent / Drive Mode
@@ -72,7 +77,7 @@ In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 - **Run Task in Agent** — prompt to clipboard + Agent
 - **Drive Mode** — agent walks the queue via MCP `proman_*`
 - Tree structure changes only after your **Approve**
-- On activation, writes `.cursor/mcp.json` (`proman` server)
+- On activation, writes `.cursor/mcp.json` (`proman` server); after install, **enable** it in Settings → MCP and restart MCP / Reload Window
 
 ### Team work (local)
 
