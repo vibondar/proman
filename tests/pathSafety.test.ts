@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isSafeId, resolveInside, resolvePlanningDir } from "../src/core/pathSafety";
+import {
+  isSafeId,
+  resolveInside,
+  resolvePlanningDir,
+  resolveTreeJsonPath,
+  parseTreeFileName,
+} from "../src/core/pathSafety";
 
 describe("isSafeId", () => {
   it("accepts alphanumeric ids with _ and -", () => {
@@ -30,6 +36,28 @@ describe("resolveInside", () => {
 
   it("allows the root itself", () => {
     expect(resolveInside("/tmp/ws")).toBe("/tmp/ws");
+  });
+});
+
+describe("resolveTreeJsonPath", () => {
+  it("resolves under .proman/trees for safe ids", () => {
+    expect(resolveTreeJsonPath("/tmp/ws", "roadmap")).toBe(
+      "/tmp/ws/.proman/trees/roadmap.json"
+    );
+  });
+
+  it("rejects traversal and overwrite outside trees/", () => {
+    expect(resolveTreeJsonPath("/tmp/ws", "../../package")).toBeNull();
+    expect(resolveTreeJsonPath("/tmp/ws", "..")).toBeNull();
+    expect(resolveTreeJsonPath("/tmp/ws", "a/b")).toBeNull();
+  });
+});
+
+describe("parseTreeFileName", () => {
+  it("accepts safe id filenames only", () => {
+    expect(parseTreeFileName("roadmap.json")).toBe("roadmap");
+    expect(parseTreeFileName("../../x.json")).toBeNull();
+    expect(parseTreeFileName("evil.json.bak")).toBeNull();
   });
 });
 

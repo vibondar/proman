@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { resolveInside } from "./pathSafety";
+import { resolveInside, resolveTreeJsonPath } from "./pathSafety";
 
 /**
  * Workspace-scoped IO via vscode.workspace.fs (respects trust / workspace APIs).
@@ -43,6 +43,19 @@ export async function wsWriteText(
   const dirInside = resolveInside(workspaceRoot, path.relative(workspaceRoot, dir) || ".");
   if (!dirInside) return false;
   await vscode.workspace.fs.createDirectory(vscode.Uri.file(dirInside));
+  await vscode.workspace.fs.writeFile(vscode.Uri.file(full), Buffer.from(text, "utf8"));
+  return true;
+}
+
+/** Write tree JSON only under `.proman/trees/<safeId>.json`. */
+export async function wsWriteTreeJson(
+  workspaceRoot: string,
+  treeId: string,
+  text: string
+): Promise<boolean> {
+  const full = resolveTreeJsonPath(workspaceRoot, treeId);
+  if (!full) return false;
+  await wsMkdir(workspaceRoot, ".proman", "trees");
   await vscode.workspace.fs.writeFile(vscode.Uri.file(full), Buffer.from(text, "utf8"));
   return true;
 }

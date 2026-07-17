@@ -1,13 +1,21 @@
 import { TaskNode, TaskStatus, ProjectState, TreeBundle } from "../core/types";
-import { isSafeId } from "./pathSafety";
+import { isSafeId, resolveTreeJsonPath } from "./pathSafety";
 import { parseStructureOps, StructureOp } from "./proposalOps";
-import { wsExists, wsMkdir, wsReadDir, wsReadText, wsWriteText } from "./workspaceIo";
+import {
+  wsExists,
+  wsMkdir,
+  wsReadDir,
+  wsReadText,
+  wsWriteText,
+  wsWriteTreeJson,
+} from "./workspaceIo";
 import {
   edgesFromTasks,
   flattenForest,
   legacyToForest,
   projectStateFromForest,
   pullFlatIntoForest,
+  sanitizeLoadedTreeBundle,
   syncMetaTrees,
 } from "./forest";
 import { normalizeProjectMeta } from "./projectMeta";
@@ -28,17 +36,8 @@ export async function loadProjectState(workspaceRoot: string): Promise<ProjectSt
       const text = await wsReadText(workspaceRoot, PROMAN, "trees", name);
       if (!text) continue;
       try {
-        const raw = JSON.parse(text) as TreeBundle;
-        if (!raw?.id || !raw.tasks) continue;
-        trees.push({
-          id: raw.id,
-          title: raw.title || raw.id,
-          sourceFile: raw.sourceFile,
-          roots: raw.roots ?? [],
-          tasks: raw.tasks ?? {},
-          edges: raw.edges ?? edgesFromTasks(raw.tasks ?? {}),
-          updatedAt: raw.updatedAt || meta.updatedAt,
-        });
+        const bundle = sanitizeLoadedTreeBundle(JSON.parse(text), name);
+        if (bundle) trees.push(bundle);
       } catch {
         /* skip */
       }
@@ -70,6 +69,7 @@ export async function saveProjectState(workspaceRoot: string, state: ProjectStat
   if (!state.trees?.length) {
     state.trees = legacyToForest(state.meta, state.roots, state.tasks, state.edges ?? []);
   }
+  state.trees = state.trees.filter((t) => isSafeId(t.id));
   pullFlatIntoForest(state);
   state.meta = syncMetaTrees(state.meta, state.trees);
   const flat = flattenForest(state.trees);
@@ -84,9 +84,13 @@ export async function saveProjectState(workspaceRoot: string, state: ProjectStat
   );
   let okTrees = true;
   for (const tree of state.trees) {
-    const ok = await wsWriteText(
+    if (!resolveTreeJsonPath(workspaceRoot, tree.id)) {
+      okTrees = false;
+      continue;
+    }
+    const ok = await wsWriteTreeJson(
       workspaceRoot,
-      [PROMAN, "trees", `${tree.id}.json`],
+      tree.id,
       JSON.stringify(tree, null, 2)
     );
     if (!ok) okTrees = false;

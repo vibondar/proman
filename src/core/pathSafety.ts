@@ -19,6 +19,31 @@ export function resolveInside(root: string, ...parts: string[]): string | null {
   return candidate;
 }
 
+/**
+ * Path for `.proman/trees/<treeId>.json`.
+ * Requires isSafeId(treeId) and that the file stays exactly under trees/.
+ */
+export function resolveTreeJsonPath(
+  workspaceRoot: string,
+  treeId: string
+): string | null {
+  if (!isSafeId(treeId)) return null;
+  const treesDir = resolveInside(workspaceRoot, ".proman", "trees");
+  if (!treesDir) return null;
+  const full = resolveInside(workspaceRoot, ".proman", "trees", `${treeId}.json`);
+  if (!full) return null;
+  if (path.dirname(full) !== treesDir) return null;
+  return full;
+}
+
+/** Filename must be `<safeId>.json`. */
+export function parseTreeFileName(fileName: string): string | null {
+  if (!fileName.endsWith(".json")) return null;
+  const id = fileName.slice(0, -".json".length);
+  if (!isSafeId(id)) return null;
+  return id;
+}
+
 /** Resolve planningDir relative to workspace; reject absolute escapes. */
 export function resolvePlanningDir(
   workspaceRoot: string,

@@ -10,8 +10,8 @@ import {
   TreeProgress,
 } from "./types";
 import { enrichAllTasks, enrichTaskFromDescription, upsertMetaInDescription } from "./taskMeta";
-import { resolvePlanningDir } from "./pathSafety";
-import { wsMkdir, wsReadDir, wsReadText, wsWriteText } from "./workspaceIo";
+import { isSafeId, resolvePlanningDir } from "./pathSafety";
+import { wsMkdir, wsReadDir, wsReadText, wsWriteText, wsWriteTreeJson } from "./workspaceIo";
 import { appendHistory, HistoryEntry, loadHistory, makeHistoryEntry } from "./history";
 import { actorsEqual, displayActor, normalizeActor } from "./actor";
 import {
@@ -36,6 +36,7 @@ import {
   mergeTreePreserveProgress,
   namespaceTaskIds,
   projectStateFromForest,
+  sanitizeLoadedTreeBundle,
   syncMetaTrees,
 } from "./forest";
 
@@ -209,17 +210,12 @@ export class ProjectStore {
         for (const [name] of treeFiles) {
           const text = await wsReadText(root, PROMAN_DIR, "trees", name);
           if (!text) continue;
-          const bundle = JSON.parse(text) as TreeBundle;
-          if (bundle?.id && bundle.tasks) {
-            trees.push({
-              ...bundle,
-              tasks: enrichAllTasks(bundle.tasks ?? {}),
-              roots: bundle.roots ?? [],
-              edges: bundle.edges?.length
-                ? bundle.edges
-                : edgesFromTasks(bundle.tasks ?? {}),
-              updatedAt: bundle.updatedAt || new Date().toISOString(),
-            });
+          try {
+            const bundle = sanitizeLoadedTreeBundle(JSON.parse(text), name);
+            if (bundle) trees.push(bundle);
+            else this.log(`load: skipped unsafe tree file ${name}`);
+          } catch {
+            this.log(`load: skipped corrupt tree file ${name}`);
           }
         }
         if (!trees.length) trees = null;
@@ -318,12 +314,14 @@ export class ProjectStore {
     await wsMkdir(root, PROMAN_DIR, "trees");
 
     let okTrees = true;
+    const safeTrees = this.state.trees.filter((t) => isSafeId(t.id));
+    if (safeTrees.length !== this.state.trees.length) {
+      this.log("save: dropping trees with unsafe ids");
+      this.state.trees = safeTrees;
+      this.rebuildFlat();
+    }
     for (const tree of this.state.trees) {
-      const ok = await wsWriteText(
-        root,
-        [PROMAN_DIR, "trees", `${tree.id}.json`],
-        JSON.stringify(tree, null, 2)
-      );
+      const ok = await wsWriteTreeJson(root, tree.id, JSON.stringify(tree, null, 2));
       if (!ok) okTrees = false;
     }
 
@@ -525,7 +523,7 @@ export class ProjectStore {
 
   setActiveTree(treeId: string): void {
     if (!this.state) throw new Error("Project not initialized");
-    if (!findTree(this.state.trees, treeId)) {
+    if (!isSafeId(treeId) || !findTree(this.state.trees, treeId)) {
       throw new Error(`Tree ${treeId} not found`);
     }
     this.state.meta.activeTreeId = treeId;
@@ -826,6 +824,9 @@ export class ProjectStore {
     planningDir?: string;
   }): void {
     if (!this.state) throw new Error("Project not initialized");
+    if (!isSafeId(opts.treeId)) {
+      throw new Error(`Unsafe tree id: ${opts.treeId}`);
+    }
     const namespaced = namespaceTaskIds(opts.treeId, {
       roots: opts.roots,
       tasks: opts.tasks,

@@ -24,6 +24,48 @@ function resolveInside(root, ...parts) {
   return candidate;
 }
 
+function resolveTreeJsonPath(treeId) {
+  if (!isSafeId(treeId)) return null;
+  const treesDir = resolveInside(promanDir(), "trees");
+  if (!treesDir) return null;
+  const full = resolveInside(promanDir(), "trees", `${treeId}.json`);
+  if (!full) return null;
+  if (path.dirname(full) !== treesDir) return null;
+  return full;
+}
+
+function parseTreeFileName(fileName) {
+  if (!fileName.endsWith(".json")) return null;
+  const id = fileName.slice(0, -".json".length);
+  return isSafeId(id) ? id : null;
+}
+
+function sanitizeLoadedTree(raw, fileName) {
+  const fileId = parseTreeFileName(fileName);
+  if (!fileId || !raw || typeof raw !== "object") return null;
+  if (typeof raw.id !== "string" || !isSafeId(raw.id) || raw.id !== fileId) return null;
+  if (!raw.tasks || typeof raw.tasks !== "object") return null;
+  return {
+    id: raw.id,
+    title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : raw.id,
+    sourceFile: typeof raw.sourceFile === "string" ? raw.sourceFile : undefined,
+    roots: Array.isArray(raw.roots) ? raw.roots.filter((id) => raw.tasks[id]) : [],
+    tasks: raw.tasks,
+    edges: Array.isArray(raw.edges) ? raw.edges : [],
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+  };
+}
+
+function treeNsPrefix(treeId) {
+  return `${treeId}__`;
+}
+
+function isNamespacedUnderTree(treeId, taskId) {
+  if (!isSafeId(treeId) || typeof taskId !== "string") return false;
+  const prefix = treeNsPrefix(treeId);
+  return taskId.startsWith(prefix) && taskId.length > prefix.length;
+}
+
 function resolvePlanningDir(workspaceRoot, planningDir) {
   if (!planningDir || typeof planningDir !== "string") return null;
   if (path.isAbsolute(planningDir)) {
@@ -47,7 +89,8 @@ function loadState() {
       if (!name.endsWith(".json")) continue;
       try {
         const raw = JSON.parse(fs.readFileSync(path.join(treesDir, name), "utf8"));
-        if (raw?.id && raw.tasks) trees.push(raw);
+        const bundle = sanitizeLoadedTree(raw, name);
+        if (bundle) trees.push(bundle);
       } catch {
         /* skip */
       }
@@ -89,7 +132,8 @@ function loadState() {
 }
 
 function pullFlatIntoTrees(state) {
-  if (!state.trees?.length) {
+  state.trees = (state.trees || []).filter((t) => isSafeId(t.id));
+  if (!state.trees.length) {
     state.trees = [
       {
         id: "main",
@@ -103,24 +147,25 @@ function pullFlatIntoTrees(state) {
     return;
   }
   const claimed = new Set();
-  for (const tree of state.trees) {
+  const byLen = [...state.trees].sort((a, b) => b.id.length - a.id.length);
+  for (const tree of byLen) {
     const next = {};
     for (const id of Object.keys(tree.tasks || {})) {
-      if (state.tasks[id]) {
+      if (state.tasks[id] && !claimed.has(id)) {
         next[id] = state.tasks[id];
         claimed.add(id);
       }
     }
     for (const [id, t] of Object.entries(state.tasks || {})) {
       if (claimed.has(id)) continue;
-      if (id.startsWith(tree.id + "_")) {
+      if (isNamespacedUnderTree(tree.id, id)) {
         next[id] = t;
         claimed.add(id);
       }
     }
     tree.tasks = next;
     tree.roots = Object.keys(next).filter(
-      (id) => !Object.values(next).some((t) => (t.children || []).includes(id))
+      (id) => !Object.values(next).some((n) => (n.children || []).includes(id))
     );
     tree.updatedAt = new Date().toISOString();
   }
@@ -141,18 +186,21 @@ function saveState(state) {
   fs.mkdirSync(path.join(dir, "trees"), { recursive: true });
   state.meta.updatedAt = new Date().toISOString();
   pullFlatIntoTrees(state);
-  state.meta.trees = (state.trees || []).map((t) => ({
+  state.trees = (state.trees || []).filter((t) => isSafeId(t.id));
+  state.meta.trees = state.trees.map((t) => ({
     id: t.id,
     title: t.title,
     sourceFile: t.sourceFile,
     updatedAt: t.updatedAt,
   }));
-  if (!state.meta.activeTreeId && state.trees?.[0]) {
+  if (!state.meta.activeTreeId && state.trees[0]) {
     state.meta.activeTreeId = state.trees[0].id;
   }
   fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify(state.meta, null, 2));
-  for (const tree of state.trees || []) {
-    fs.writeFileSync(path.join(dir, "trees", `${tree.id}.json`), JSON.stringify(tree, null, 2));
+  for (const tree of state.trees) {
+    const full = resolveTreeJsonPath(tree.id);
+    if (!full) continue;
+    fs.writeFileSync(full, JSON.stringify(tree, null, 2));
   }
   fs.writeFileSync(
     path.join(dir, "tree.json"),
