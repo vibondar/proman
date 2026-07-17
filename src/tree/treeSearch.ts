@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ProjectStore } from "../core/store";
-import { statusLabel, TaskNode } from "../core/types";
+import { TaskNode } from "../core/types";
+import { statusLabelL10n, t } from "../i18n";
 import { PromanTreeItem, PromanTreeProvider } from "./promanTree";
 
 interface TaskQuickPickItem extends vscode.QuickPickItem {
@@ -11,15 +12,15 @@ function breadcrumb(store: ProjectStore, taskId: string): string {
   const state = store.current;
   if (!state) return "";
   const parentOf = new Map<string, string>();
-  for (const t of Object.values(state.tasks)) {
-    for (const c of t.children) parentOf.set(c, t.id);
+  for (const node of Object.values(state.tasks)) {
+    for (const c of node.children) parentOf.set(c, node.id);
   }
   const parts: string[] = [];
   let id: string | undefined = parentOf.get(taskId);
   while (id && parts.length < 4) {
-    const t = state.tasks[id];
-    if (!t) break;
-    parts.unshift(t.title);
+    const node = state.tasks[id];
+    if (!node) break;
+    parts.unshift(node.title);
     id = parentOf.get(id);
   }
   return parts.join(" › ");
@@ -36,7 +37,7 @@ function toPickItem(store: ProjectStore, task: TaskNode): TaskQuickPickItem {
   const who = task.assignee ? `@${task.assignee.replace(/^@/, "")}` : undefined;
   return {
     label: task.title,
-    description: [statusLabel(task.status), sp, who, task.id].filter(Boolean).join(" · "),
+    description: [statusLabelL10n(task.status), sp, who, task.id].filter(Boolean).join(" · "),
     detail: [path, task.description?.slice(0, 120)].filter(Boolean).join(" — ") || undefined,
     taskId: task.id,
   };
@@ -54,30 +55,31 @@ export async function runTreeSearch(
 ): Promise<void> {
   const state = store.current;
   if (!state || !Object.keys(state.tasks).length) {
-    vscode.window.showWarningMessage("Proman: дерево пусто");
+    vscode.window.showWarningMessage(t("Proman: tree is empty"));
     return;
   }
 
   const qp = vscode.window.createQuickPick<TaskQuickPickItem>();
-  qp.placeholder = "Поиск по названию, описанию, id, статусу…";
+  qp.placeholder = t("Search by title, description, id, status…");
   qp.matchOnDescription = true;
   qp.matchOnDetail = true;
   qp.ignoreFocusOut = true;
-  qp.title = tree.getFilterQuery()
-    ? `Proman · фильтр: «${tree.getFilterQuery()}»`
-    : "Proman · поиск по дереву";
+  const filterQ = tree.getFilterQuery();
+  qp.title = filterQ
+    ? t("Proman · filter: “{0}”", filterQ)
+    : t("Proman · search tree");
 
   const filterBtn: vscode.QuickInputButton = {
     iconPath: new vscode.ThemeIcon("filter"),
-    tooltip: "Оставить в дереве только совпадения с текущим запросом",
+    tooltip: t("Keep only matches for the current query in the tree"),
   };
   const clearBtn: vscode.QuickInputButton = {
     iconPath: new vscode.ThemeIcon("clear-all"),
-    tooltip: "Сбросить фильтр дерева",
+    tooltip: t("Clear tree filter"),
   };
   qp.buttons = tree.getFilterQuery() ? [filterBtn, clearBtn] : [filterBtn];
 
-  const all = Object.values(state.tasks).map((t) => toPickItem(store, t));
+  const all = Object.values(state.tasks).map((task) => toPickItem(store, task));
   qp.items = all;
 
   const disposables: vscode.Disposable[] = [];
@@ -97,7 +99,7 @@ export async function runTreeSearch(
         if (btn === filterBtn) {
           const q = qp.value.trim();
           if (!q) {
-            vscode.window.showWarningMessage("Введите текст для фильтра");
+            vscode.window.showWarningMessage(t("Enter text to filter"));
             return;
           }
           tree.setFilterQuery(q);

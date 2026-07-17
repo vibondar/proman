@@ -24,6 +24,7 @@ import {
   enableGithubIssues,
   syncClosedGithubIssues,
 } from "./githubSync";
+import { t } from "./i18n";
 
 let planningWatcher: vscode.FileSystemWatcher | undefined;
 
@@ -37,8 +38,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   store.setAssignmentListener((e) => {
     const fromOther = e.actor !== "unknown" && e.actor !== e.assignee;
     const text = fromOther
-      ? `📬 Вам назначена задача «${e.title}» от @${e.actor}`
-      : `📬 Задача «${e.title}» назначена вам`;
+      ? t("📬 Task “{0}” was assigned to you by @{1}", e.title, e.actor)
+      : t("📬 Task “{0}” was assigned to you", e.title);
     void vscode.window.showInformationMessage(text);
   });
   await store.waitForWorkspace();
@@ -75,11 +76,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const bits: string[] = [];
     if (myOnly) {
       const me = getMetaCurrentUser(state?.meta);
-      bits.push(`👤 Мои (${me ? "@" + me : "(user?)"}) · ${tree.getMatchCount()} задач`);
+      bits.push(
+        t(
+          "👤 Mine ({0}) · {1} tasks",
+          me ? "@" + me : "(user?)",
+          tree.getMatchCount()
+        )
+      );
     }
-    if (filter) bits.push(`фильтр «${filter}» · ${tree.getMatchCount()} совп.`);
-    if (pathHl && !filter && !myOnly) bits.push("путь подсвечен");
-    if (state && n > 0) bits.push(`${p.done}/${p.total} готово · ${p.inProgress} в работе · ${p.blocked} blocked`);
+    if (filter) {
+      bits.push(t("filter “{0}” · {1} matches", filter, tree.getMatchCount()));
+    }
+    if (pathHl && !filter && !myOnly) bits.push(t("path highlighted"));
+    if (state && n > 0) {
+      bits.push(
+        t(
+          "{0}/{1} done · {2} in progress · {3} blocked",
+          p.done,
+          p.total,
+          p.inProgress,
+          p.blocked
+        )
+      );
+    }
     treeView.message = bits.length ? bits.join(" · ") : undefined;
   };
 
@@ -96,7 +115,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       canSelectFolders: true,
       canSelectMany: true,
       filters: { Markdown: ["md"] },
-      openLabel: "Импортировать в Proman",
+      openLabel: t("Import into Proman"),
     });
     if (!uris?.length) return;
     let count = 0;
@@ -117,7 +136,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     if (files.length) count += await importer.importUris(files, planningDir);
     refreshUi();
-    vscode.window.showInformationMessage(`Proman: импортировано узлов: ${count}`);
+    vscode.window.showInformationMessage(t("Proman: imported nodes: {0}", count));
     setupPlanningWatcher(store, importer, refreshUi);
   };
 
@@ -127,14 +146,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       canSelectFolders: true,
       canSelectFiles: false,
       canSelectMany: false,
-      openLabel: "Папка планирования",
+      openLabel: t("Planning folder"),
     });
     if (!uris?.[0]) return;
     store.setPlanningDir(vscode.workspace.asRelativePath(uris[0]));
     await store.save();
     setupPlanningWatcher(store, importer, refreshUi);
     vscode.window.showInformationMessage(
-      `Proman: planningDir = ${store.current?.meta.planningDir}`
+      t("Proman: planningDir = {0}", String(store.current?.meta.planningDir))
     );
   };
 
@@ -173,13 +192,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("proman.driveTree", () => startDriveMode(mcp)),
     vscode.commands.registerCommand("proman.stopDrive", () => {
       mcp.getDrive().stop();
-      vscode.window.showInformationMessage("Proman Drive Mode остановлен");
+      vscode.window.showInformationMessage(t("Proman Drive Mode stopped"));
     }),
     vscode.commands.registerCommand("proman.selectTask", (id: string) => openDetails(id)),
     vscode.commands.registerCommand("proman.openTaskDetails", (item?: PromanTreeItem) => {
       const id = taskIdFromArg(item);
       if (!id) {
-        vscode.window.showWarningMessage("Выберите задачу в дереве");
+        vscode.window.showWarningMessage(t("Select a task in the tree"));
         return;
       }
       openDetails(id);
@@ -190,7 +209,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const n = loaded ? Object.keys(loaded.tasks).length : 0;
       output.appendLine(`reloadTree: ${n} tasks`);
       vscode.window.showInformationMessage(
-        n > 0 ? `Proman: загружено ${n} задач` : "Proman: на диске пусто — импортируйте MD"
+        n > 0
+          ? t("Proman: loaded {0} tasks", n)
+          : t("Proman: nothing on disk — import MD")
       );
     }),
     vscode.commands.registerCommand("proman.searchTree", () =>
@@ -209,13 +230,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       if (!tree.isMyTasksOnly() && !store.hasCurrentUser()) {
         const name = await vscode.window.showInputBox({
-          prompt: "Кто вы в этом проекте? (team.currentUser в project.json)",
+          prompt: t("Who are you in this project? (team.currentUser in project.json)"),
           placeHolder: "alice",
           value: getMetaCurrentUser(store.current?.meta) ?? "",
         });
         if (!name?.trim()) {
           void vscode.window.showWarningMessage(
-            "Proman: укажите пользователя, чтобы фильтровать «Мои задачи»"
+            t("Proman: set a user to filter “My tasks”")
           );
           return;
         }
@@ -225,12 +246,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const on = tree.toggleMyTasksOnly();
       refreshUi();
       void vscode.window.showInformationMessage(
-        on ? "👤 Показаны только ваши задачи" : "Показаны все задачи"
+        on ? t("👤 Showing only your tasks") : t("Showing all tasks")
       );
     }),
     vscode.commands.registerCommand("proman.setCurrentUser", async () => {
       if (!store.current) await store.ensureInitialized();
       const members = store.listAssignees();
+      const enterManual = t("Enter manually…");
       const picked = await vscode.window.showQuickPick(
         [
           ...members.map((u) => ({
@@ -238,10 +260,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             description: store.current?.meta.team?.members.find((m) => m.username === u)?.name,
             value: u,
           })),
-          { label: "Ввести вручную…", value: "__custom__" },
+          { label: enterManual, value: "__custom__" },
         ],
         {
-          title: "Текущий пользователь (team.currentUser)",
+          title: t("Current user (team.currentUser)"),
           placeHolder: getMetaCurrentUser(store.current?.meta) ?? "alice",
         }
       );
@@ -261,30 +283,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       refreshUi();
       void vscode.window.showInformationMessage(
         name.trim()
-          ? `Proman: вы вошли как @${name.trim().replace(/^@+/, "")}`
-          : "Proman: текущий пользователь сброшен"
+          ? t(
+              "Proman: signed in as @{0}",
+              name.trim().replace(/^@+/, "")
+            )
+          : t("Proman: current user cleared")
       );
     }),
     vscode.commands.registerCommand("proman.gitPull", () => runGitPull(store, refreshUi)),
     vscode.commands.registerCommand("proman.gitPush", () => runGitPush(store)),
     vscode.commands.registerCommand("proman.enableGitSync", () =>
       enableGitSync(store).catch((e) =>
-        vscode.window.showErrorMessage(`Proman: ${e instanceof Error ? e.message : String(e)}`)
+        vscode.window.showErrorMessage(
+          t("Proman: {0}", e instanceof Error ? e.message : String(e))
+        )
       )
     ),
     vscode.commands.registerCommand("proman.configureGitSync", () =>
       configureGitSync(store).catch((e) =>
-        vscode.window.showErrorMessage(`Proman: ${e instanceof Error ? e.message : String(e)}`)
+        vscode.window.showErrorMessage(
+          t("Proman: {0}", e instanceof Error ? e.message : String(e))
+        )
       )
     ),
     vscode.commands.registerCommand("proman.enableGithubIssues", () =>
       enableGithubIssues(store).catch((e) =>
-        vscode.window.showErrorMessage(`Proman: ${e instanceof Error ? e.message : String(e)}`)
+        vscode.window.showErrorMessage(
+          t("Proman: {0}", e instanceof Error ? e.message : String(e))
+        )
       )
     ),
     vscode.commands.registerCommand("proman.configureGithubIssues", () =>
       configureGithubIssues(store).catch((e) =>
-        vscode.window.showErrorMessage(`Proman: ${e instanceof Error ? e.message : String(e)}`)
+        vscode.window.showErrorMessage(
+          t("Proman: {0}", e instanceof Error ? e.message : String(e))
+        )
       )
     ),
     vscode.commands.registerCommand("proman.syncGithubIssues", async () => {
@@ -292,7 +325,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       refreshUi();
       if (n === 0) {
         void vscode.window.showInformationMessage(
-          "Proman: нет задач для обновления по закрытым Issues"
+          t("Proman: no tasks to update from closed Issues")
         );
       }
     }),
@@ -301,29 +334,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!id || !store.current?.tasks[id]) return;
       if (!store.hasCurrentUser()) {
         const name = await vscode.window.showInputBox({
-          prompt: "Сначала укажите, кто вы (currentUser)",
+          prompt: t("First say who you are (currentUser)"),
           placeHolder: "alice",
         });
         if (!name?.trim()) return;
         store.setCurrentUser(name);
       }
       const known = store.listAssignees();
+      const assignMe = t("Assign to me (@{0})", store.currentUser());
+      const enterManual = t("Enter manually…");
+      const clearAssignee = t("Clear assignment");
       const picked = await vscode.window.showQuickPick(
         [
-          { label: `Назначить на меня (@${store.currentUser()})`, value: store.currentUser() },
+          { label: assignMe, value: store.currentUser() },
           ...known
             .filter((a) => a !== store.currentUser())
             .map((a) => ({ label: `@${a}`, value: a })),
-          { label: "Ввести вручную…", value: "__custom__" },
-          { label: "Снять назначение", value: "__clear__" },
+          { label: enterManual, value: "__custom__" },
+          { label: clearAssignee, value: "__clear__" },
         ],
-        { title: `Назначить: ${store.current.tasks[id].title}` }
+        { title: t("Assign: {0}", store.current.tasks[id].title) }
       );
       if (!picked) return;
       let assignee: string | undefined;
       if (picked.value === "__clear__") assignee = undefined;
       else if (picked.value === "__custom__") {
-        const typed = await vscode.window.showInputBox({ prompt: "Assignee", placeHolder: "bob" });
+        const typed = await vscode.window.showInputBox({
+          prompt: t("Assignee"),
+          placeHolder: "bob",
+        });
         if (typed === undefined) return;
         assignee = typed.trim().replace(/^@+/, "") || undefined;
       } else assignee = picked.value;
@@ -334,8 +373,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("proman.addRootTask", async () => {
       await store.ensureInitialized();
       const title = await vscode.window.showInputBox({
-        prompt: "Название корневой задачи",
-        placeHolder: "Например: Auth refactor",
+        prompt: t("Root task title"),
+        placeHolder: t("e.g. Auth refactor"),
       });
       if (!title) return;
       const task = store.addTask(null, title);
@@ -347,10 +386,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("proman.addChildTask", async (item?: PromanTreeItem) => {
       const parentId = taskIdFromArg(item);
       if (!parentId) {
-        vscode.window.showWarningMessage("Выберите задачу");
+        vscode.window.showWarningMessage(t("Select a task"));
         return;
       }
-      const title = await vscode.window.showInputBox({ prompt: "Название подзадачи" });
+      const title = await vscode.window.showInputBox({ prompt: t("Subtask title") });
       if (!title) return;
       const task = store.addTask(parentId, title);
       await store.save();
@@ -363,10 +402,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (!id) return;
       const mode = await vscode.window.showQuickPick(
         [
-          { label: "Поднять детей к родителю", mode: "promote" as const },
-          { label: "Удалить вместе с детьми", mode: "cascade" as const },
+          { label: t("Promote children to parent"), mode: "promote" as const },
+          { label: t("Delete with children"), mode: "cascade" as const },
         ],
-        { title: "Удаление задачи" }
+        { title: t("Delete task") }
       );
       if (!mode) return;
       if (!store.current) return;
@@ -376,11 +415,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         mode: mode.mode,
       });
       if (impact.affected.length) {
+        const deleteBtn = t("Delete");
         const ok = await vscode.window.showWarningMessage(
-          `Затронет ${impact.affected.length} узлов. Продолжить?`,
-          "Удалить"
+          t("Will affect {0} nodes. Continue?", impact.affected.length),
+          deleteBtn
         );
-        if (ok !== "Удалить") return;
+        if (ok !== deleteBtn) return;
       }
       store.deleteTask(id, mode.mode);
       store.applyBlockedStatuses();
@@ -414,16 +454,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       refreshUi();
       if (cycles.length) {
         vscode.window.showErrorMessage(
-          `Proman: циклы: ${cycles.map((c) => c.join("→")).join("; ")}`
+          t("Proman: cycles: {0}", cycles.map((c) => c.join("→")).join("; "))
         );
       } else {
-        vscode.window.showInformationMessage("Proman: зависимости пересчитаны");
+        vscode.window.showInformationMessage(t("Proman: dependencies recalculated"));
       }
     }),
     vscode.commands.registerCommand("proman.runTaskInAgent", async (item?: PromanTreeItem) => {
       const id = taskIdFromArg(item);
       if (!id) {
-        vscode.window.showWarningMessage("Выберите задачу");
+        vscode.window.showWarningMessage(t("Select a task"));
         return;
       }
       await handoff.runTask(id);
@@ -432,7 +472,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("proman.copyAgentPrompt", async (item?: PromanTreeItem) => {
       const id = taskIdFromArg(item);
       if (!id) {
-        vscode.window.showWarningMessage("Выберите задачу");
+        vscode.window.showWarningMessage(t("Select a task"));
         return;
       }
       await handoff.copyPrompt(id);
@@ -501,16 +541,18 @@ function setupPlanningWatcher(
   const schedule = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
+      const syncBtn = t("Sync");
+      const laterBtn = t("Later");
       const choice = await vscode.window.showInformationMessage(
-        "Proman: файлы планирования изменились. Синхронизировать дерево?",
-        "Синхронизировать",
-        "Позже"
+        t("Proman: planning files changed. Sync the tree?"),
+        syncBtn,
+        laterBtn
       );
-      if (choice !== "Синхронизировать") return;
+      if (choice !== syncBtn) return;
       const folder = vscode.Uri.file(dir.startsWith("/") ? dir : `${root}/${dir}`);
       const count = await importer.importDirectory(folder);
       refreshUi();
-      vscode.window.showInformationMessage(`Proman: синхронизировано, узлов: ${count}`);
+      vscode.window.showInformationMessage(t("Proman: synced, nodes: {0}", count));
     }, 800);
   };
 

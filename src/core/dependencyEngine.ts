@@ -6,6 +6,7 @@ import {
   TaskNode,
   TaskStatus,
 } from "./types";
+import { t } from "../i18n";
 
 function cloneState(state: ProjectState): ProjectState {
   return JSON.parse(JSON.stringify(state)) as ProjectState;
@@ -47,7 +48,7 @@ function applyAction(state: ProjectState, action: ImpactAction): void {
     case "add": {
       const task: TaskNode = {
         id: newId(),
-        title: action.title.trim() || "Новая задача",
+        title: action.title.trim() || t("New task"),
         description: "",
         status: "todo",
         children: [],
@@ -146,7 +147,7 @@ export class DependencyEngine {
     if (cycles.length) {
       return {
         ok: false,
-        error: "Обнаружен цикл зависимостей",
+        error: t("Dependency cycle detected"),
         affected: [],
         cycles,
       };
@@ -164,7 +165,7 @@ export class DependencyEngine {
         affected.push({
           taskId: id,
           title: a.title,
-          change: "Будет добавлена",
+          change: t("Will be added"),
           suggestedStatus: afterBlocked.get(id),
         });
         continue;
@@ -173,7 +174,7 @@ export class DependencyEngine {
         affected.push({
           taskId: id,
           title: b.title,
-          change: "Будет удалена",
+          change: t("Will be removed"),
         });
         continue;
       }
@@ -185,14 +186,14 @@ export class DependencyEngine {
         affected.push({
           taskId: id,
           title: a.title,
-          change: `Статус: ${sb} → ${sa}`,
+          change: t("Status: {0} → {1}", String(sb), String(sa)),
           suggestedStatus: sa,
         });
       } else if (JSON.stringify(b.dependsOn) !== JSON.stringify(a.dependsOn)) {
         affected.push({
           taskId: id,
           title: a.title,
-          change: "Изменятся зависимости",
+          change: t("Dependencies will change"),
           suggestedStatus: sa,
         });
       }
@@ -206,7 +207,7 @@ export class DependencyEngine {
           affected.push({
             taskId: depId,
             title: dep.title,
-            change: "Будет блокировать новую задачу, пока не done",
+            change: t("Will block the new task until done"),
           });
         }
       }
@@ -232,27 +233,39 @@ export class DependencyEngine {
   describeRelation(state: ProjectState, aId: string, bId: string): string {
     const a = state.tasks[aId];
     const b = state.tasks[bId];
-    if (!a || !b) return "Задачи не найдены";
+    if (!a || !b) return t("Tasks not found");
     if (a.dependsOn.includes(bId)) {
-      return `"${a.title}" зависит от "${b.title}" — пока B не done, A будет blocked`;
+      return t(
+        '"{0}" depends on "{1}" — until B is done, A stays blocked',
+        a.title,
+        b.title
+      );
     }
     if (b.dependsOn.includes(aId)) {
-      return `"${b.title}" зависит от "${a.title}" — добавление/задержка A сдвигает B`;
+      return t(
+        '"{0}" depends on "{1}" — adding/delaying A shifts B',
+        b.title,
+        a.title
+      );
     }
     // Indirect
     const reaches = (from: string, to: string, seen = new Set<string>()): boolean => {
       if (from === to) return true;
       if (seen.has(from)) return false;
       seen.add(from);
-      const t = state.tasks[from];
-      return (t?.dependsOn ?? []).some((d) => reaches(d, to, seen));
+      const node = state.tasks[from];
+      return (node?.dependsOn ?? []).some((d) => reaches(d, to, seen));
     };
     if (reaches(aId, bId)) {
-      return `"${a.title}" транзитивно зависит от "${b.title}"`;
+      return t('"{0}" transitively depends on "{1}"', a.title, b.title);
     }
     if (reaches(bId, aId)) {
-      return `"${b.title}" транзитивно зависит от "${a.title}" — изменения A повлияют на B`;
+      return t(
+        '"{0}" transitively depends on "{1}" — changes to A affect B',
+        b.title,
+        a.title
+      );
     }
-    return `"${a.title}" и "${b.title}" напрямую не связаны зависимостями`;
+    return t('"{0}" and "{1}" are not directly related by dependencies', a.title, b.title);
   }
 }

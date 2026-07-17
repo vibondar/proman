@@ -44,7 +44,7 @@ describe("DependencyEngine", () => {
     });
     expect(preview.ok).toBe(false);
     if (preview.ok) return;
-    expect(preview.error).toMatch(/цикл/i);
+    expect(preview.error).toMatch(/cycle/i);
     expect(engine.detectCycles(state({ a: task("a", { dependsOn: ["b"] }), b: task("b", { dependsOn: ["a"] }) }, ["a", "b"])).length).toBeGreaterThan(0);
   });
 
@@ -67,7 +67,7 @@ describe("DependencyEngine", () => {
     });
     expect(add.ok).toBe(true);
     if (!add.ok) return;
-    expect(add.affected.some((x) => x.change === "Будет добавлена")).toBe(true);
+    expect(add.affected.some((x) => x.change === "Will be added")).toBe(true);
   });
 
   it("previews add and status impact on dependents", () => {
@@ -96,7 +96,7 @@ describe("DependencyEngine", () => {
     const preview = engine.preview(s, { kind: "delete", taskId: "p", mode: "cascade" });
     expect(preview.ok).toBe(true);
     if (!preview.ok) return;
-    expect(preview.affected.some((x) => x.taskId === "p" && x.change === "Будет удалена")).toBe(
+    expect(preview.affected.some((x) => x.taskId === "p" && x.change === "Will be removed")).toBe(
       true
     );
     expect(preview.affected.some((x) => x.taskId === "c")).toBe(true);
@@ -111,7 +111,7 @@ describe("DependencyEngine", () => {
       },
       ["a", "b", "c"]
     );
-    expect(engine.describeRelation(s, "a", "b")).toMatch(/зависит от/);
-    expect(engine.describeRelation(s, "a", "c")).toMatch(/не связаны/);
+    expect(engine.describeRelation(s, "a", "b")).toMatch(/depends on/);
+    expect(engine.describeRelation(s, "a", "c")).toMatch(/not directly related/);
   });
 });

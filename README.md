@@ -1,5 +1,7 @@
 # Proman
 
+**Язык:** [Русский](./README.md) · [English](./README.en.md)
+
 Расширение **Cursor / VS Code** для управления разработкой через дерево задач в `.proman/`.
 
 Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
@@ -160,6 +162,10 @@ npm test
 
 ---
 
+## Язык интерфейса
+
+UI (команды, дерево, детали задачи, диалоги) следует **языку отображения** Cursor/VS Code (`Configure Display Language`). Сейчас: английский и русский. Документация: [README.md](./README.md) · [README.en.md](./README.en.md).
+
 ## Требования
 
 - Cursor или VS Code `^1.85.0`
@@ -168,6 +174,6 @@ npm test
 
 ---
 
-## Лицензия / поставка
+## Лицензия
 
-Локальный VSIX. Поле `repository` в манифесте можно добавить при публикации на Marketplace.
+MIT — см. [LICENSE](./LICENSE).

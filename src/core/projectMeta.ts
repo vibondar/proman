@@ -44,12 +44,15 @@ export function normalizeProjectMeta(raw: ProjectMeta): ProjectMeta {
 
   if (meta.github) {
     const g = meta.github;
+    const owner = String(g.owner ?? "").trim();
+    const repo = String(g.repo ?? "").trim().replace(/\.git$/i, "");
     const normalized: GithubIssuesConfig = {
       enabled: Boolean(g.enabled),
-      owner: String(g.owner ?? "").trim(),
-      repo: String(g.repo ?? "").trim(),
+      owner,
+      repo,
       createOnAdd: g.createOnAdd !== false,
       closeToDone: g.closeToDone !== false,
+      publicOnly: Boolean(g.publicOnly),
     };
     if (isGithubIssuesEnabled(normalized)) meta.github = normalized;
     else delete meta.github;

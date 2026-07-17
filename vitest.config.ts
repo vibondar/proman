@@ -20,8 +20,9 @@ export default defineConfig({
         "src/core/history.ts",
         "src/core/projectMeta.ts",
         "src/core/githubIssueLink.ts",
+        "src/core/gitSync.ts",
       ],
-      exclude: ["src/core/workspaceIo.ts", "src/core/store.ts", "src/core/planDiscoverer.ts"],
+      exclude: ["src/core/workspaceIo.ts", "src/core/store.ts", "src/core/planDiscoverer.ts", "src/core/githubApi.ts"],
     },
   },
   resolve: {

@@ -28,4 +28,17 @@ export const workspace = {
   },
 };
 
-export default { Uri, workspace };
+/** Identity l10n: returns English message with {n} placeholders filled. */
+export const l10n = {
+  t(message: string, ...args: Array<string | number | boolean>): string {
+    return message.replace(/\{(\d+)\}/g, (_m, i) => String(args[Number(i)] ?? ""));
+  },
+};
+
+export const window = {
+  showInformationMessage: async () => undefined,
+  showWarningMessage: async () => undefined,
+  showErrorMessage: async () => undefined,
+};
+
+export default { Uri, workspace, l10n, window };

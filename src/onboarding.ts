@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ProjectStore } from "./core/store";
 import { MdImporter, PlanDiscoverer } from "./core/planDiscoverer";
+import { t } from "./i18n";
 
 export async function runOnboarding(
   store: ProjectStore,
@@ -10,7 +11,9 @@ export async function runOnboarding(
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
     vscode.window.showWarningMessage(
-      "Proman: откройте папку проекта (File → Open Folder), затем выполните «Proman: Import Planning Docs»."
+      t(
+        "Proman: open a project folder (File → Open Folder), then run “Proman: Import Planning Docs”."
+      )
     );
     return;
   }
@@ -23,7 +26,7 @@ export async function runOnboarding(
     await vscode.workspace.fs.stat(roadmap);
     const count = await importer.importUris([roadmap], "docs");
     vscode.window.showInformationMessage(
-      `Proman: загружен docs/ROADMAP.md (${count} узлов)`
+      t("Proman: loaded docs/ROADMAP.md ({0} nodes)", count)
     );
     return;
   } catch {
@@ -52,14 +55,14 @@ export async function runOnboarding(
       action: "candidate" as const,
       index,
     })),
-    { label: "$(add) Начать с пустого дерева", action: "empty" },
-    { label: "$(folder-opened) Указать папку вручную…", action: "pick" },
-    { label: "Позже", action: "skip" },
+    { label: t("$(add) Start with an empty tree"), action: "empty" },
+    { label: t("$(folder-opened) Pick a folder manually…"), action: "pick" },
+    { label: t("Later"), action: "skip" },
   ];
 
   const choice = await vscode.window.showQuickPick(items, {
-    title: "Proman: найти документы планирования?",
-    placeHolder: "Выберите источник плана разработки",
+    title: t("Proman: find planning documents?"),
+    placeHolder: t("Choose a development plan source"),
   });
   if (!choice || choice.action === "skip") {
     await store.ensureInitialized();
@@ -75,7 +78,7 @@ export async function runOnboarding(
       canSelectFolders: true,
       canSelectMany: true,
       filters: { Markdown: ["md"] },
-      openLabel: "Импортировать в Proman",
+      openLabel: t("Import into Proman"),
     });
     if (!uris?.length) {
       await store.ensureInitialized();
@@ -98,7 +101,7 @@ export async function runOnboarding(
       }
     }
     if (files.length) count += await importer.importUris(files, planningDir);
-    vscode.window.showInformationMessage(`Proman: импортировано задач: ${count}`);
+    vscode.window.showInformationMessage(t("Proman: imported tasks: {0}", count));
     return;
   }
   if (choice.action === "candidate" && choice.index !== undefined) {
@@ -107,6 +110,6 @@ export async function runOnboarding(
       c.uris,
       c.directory ? vscode.workspace.asRelativePath(c.directory) : undefined
     );
-    vscode.window.showInformationMessage(`Proman: импортировано задач: ${count}`);
+    vscode.window.showInformationMessage(t("Proman: imported tasks: {0}", count));
   }
 }

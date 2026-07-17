@@ -4,6 +4,7 @@ import { sanitizeImportBasename } from "./proposalOps";
 import { ProjectStore } from "./store";
 import { resolveInside } from "./pathSafety";
 import { wsMkdir, wsWriteUri } from "./workspaceIo";
+import { t } from "../i18n";
 import * as path from "path";
 import * as vscode from "vscode";
 
@@ -56,7 +57,7 @@ export class PlanDiscoverer {
     if (planUris.length) {
       candidates.push({
         label: "type: plan (frontmatter)",
-        description: `${planUris.length} файл(ов) с type: plan`,
+        description: t("{0} file(s) with type: plan", planUris.length),
         uris: planUris,
       });
     }
@@ -65,7 +66,7 @@ export class PlanDiscoverer {
       const rel = vscode.workspace.asRelativePath(dir, false);
       candidates.push({
         label: rel || ".",
-        description: `${uris.length} md-файл(ов)`,
+        description: t("{0} markdown file(s)", uris.length),
         uris,
         directory: vscode.Uri.file(dir),
       });
@@ -77,7 +78,7 @@ export class PlanDiscoverer {
         await vscode.workspace.fs.stat(uri);
         candidates.unshift({
           label: name,
-          description: "Файл в корне проекта",
+          description: t("File in project root"),
           uris: [uri],
         });
       } catch {

@@ -22,6 +22,8 @@ import {
   setMetaCurrentUser,
 } from "./projectMeta";
 import { gitCommitProman, isGitRepo } from "./gitSync";
+import { sanitizeErrorMessage } from "./githubIssueLink";
+import { t } from "../i18n";
 
 const PROMAN_DIR = ".proman";
 
@@ -123,7 +125,7 @@ export class ProjectStore {
   }
 
   setCurrentUser(name: string): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     setMetaCurrentUser(this.state.meta, name);
   }
 
@@ -238,7 +240,7 @@ export class ProjectStore {
     if (this.state) return this.state;
     const folder = this.folder;
     if (!folder) {
-      throw new Error("Нет открытого workspace — откройте папку проекта");
+      throw new Error("No open workspace — open a project folder");
     }
     const projectName = name ?? path.basename(folder.uri.fsPath);
     this.state = emptyState(projectName);
@@ -250,7 +252,7 @@ export class ProjectStore {
     const folder = this.folder;
     if (!this.state || !folder) {
       if (this.state && !folder) {
-        throw new Error("Не удалось сохранить .proman/: нет workspace folder");
+        throw new Error("Failed to save .proman/: no workspace folder");
       }
       return;
     }
@@ -276,7 +278,7 @@ export class ProjectStore {
       JSON.stringify(this.state.edges, null, 2)
     );
     if (!okMeta || !okTree || !okEdges) {
-      throw new Error("Не удалось сохранить .proman/ (path outside workspace?)");
+      throw new Error("Failed to save .proman/ (path outside workspace?)");
     }
     if (this.pendingHistory.length) {
       const batch = this.pendingHistory.splice(0, this.pendingHistory.length);
@@ -322,20 +324,46 @@ export class ProjectStore {
         info.from,
         info.to
       );
-      const result = await gitCommitProman(root, message, {
-        push: Boolean(meta.sync.autoPush),
-      });
+      const result = await gitCommitProman(root, message);
       if (!result.ok) {
         this.log(`git auto-commit failed: ${result.error ?? result.stderr}`);
         void vscode.window.showWarningMessage(
-          `Proman git: авто-коммит не удался — ${result.error ?? result.stderr}`
+          t(
+            "Proman git: auto-commit failed — {0}",
+            sanitizeErrorMessage(result.error ?? result.stderr)
+          )
         );
         return;
       }
       if (result.committed) {
-        this.log(
-          `git auto-commit: ${message}${result.pushed ? " (+ push)" : ""}`
-        );
+        this.log(`git auto-commit: ${message}`);
+        if (meta.sync.autoPush) {
+          const pushBtn = t("Push");
+          const laterBtn = t("Not now");
+          void vscode.window
+            .showWarningMessage(
+              t(
+                "Proman: auto-commit of .proman is ready. Push to remote? (comments/assignee will go to git)"
+              ),
+              pushBtn,
+              laterBtn
+            )
+            .then(async (choice) => {
+              if (choice !== pushBtn) return;
+              const { gitPush } = await import("./gitSync");
+              const push = await gitPush(root);
+              if (!push.ok) {
+                void vscode.window.showWarningMessage(
+                  t(
+                    "Proman push: {0}",
+                    sanitizeErrorMessage(push.error ?? push.stderr)
+                  )
+                );
+              } else {
+                void vscode.window.showInformationMessage(t("Proman: push OK"));
+              }
+            });
+        }
       }
     } finally {
       this.gitBusy = false;
@@ -361,11 +389,11 @@ export class ProjectStore {
   }
 
   addTask(parentId: string | null, title: string, opts?: Partial<TaskNode>): TaskNode {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     const hasExisting = Object.keys(this.state.tasks).length > 0;
     const task: TaskNode = {
       id: newId(),
-      title: title.trim() || "Новая задача",
+      title: title.trim() || "New task",
       description: opts?.description ?? "",
       status: opts?.status ?? (hasExisting ? "new" : "todo"),
       children: [],
@@ -407,9 +435,9 @@ export class ProjectStore {
       >
     >
   ): TaskNode {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     const task = this.state.tasks[taskId];
-    if (!task) throw new Error(`Задача ${taskId} не найдена`);
+    if (!task) throw new Error(`Task ${taskId} not found`);
 
     const prevStatus = task.status;
     const prevAssignee = task.assignee;
@@ -487,7 +515,7 @@ export class ProjectStore {
   }
 
   deleteTask(taskId: string, mode: "promote" | "cascade"): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     const task = this.state.tasks[taskId];
     if (!task) return;
 
@@ -539,11 +567,11 @@ export class ProjectStore {
   }
 
   moveTask(taskId: string, newParentId: string | null, index?: number): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     if (!this.state.tasks[taskId]) return;
     if (newParentId === taskId) return;
     if (newParentId && this.isDescendant(taskId, newParentId)) {
-      throw new Error("Нельзя переместить узел в своего потомка");
+      throw new Error("Cannot move a node into its own descendant");
     }
 
     const oldParent = this.findParent(taskId);
@@ -573,7 +601,7 @@ export class ProjectStore {
     tasks: Record<string, TaskNode>;
     planningDir?: string;
   }): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     this.state.roots = data.roots;
     this.state.tasks = enrichAllTasks(data.tasks);
     if (data.planningDir) {
@@ -589,12 +617,12 @@ export class ProjectStore {
   }
 
   setPlanningDir(dir: string): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     const root = this.workspaceRoot;
-    if (!root) throw new Error("Нет workspace");
+    if (!root) throw new Error("No workspace");
     const resolved = resolvePlanningDir(root, dir);
     if (!resolved) {
-      throw new Error("planningDir должен быть внутри workspace");
+      throw new Error("planningDir must be inside the workspace");
     }
     const rel = path.relative(root, resolved);
     this.state.meta.planningDir = rel || ".";
@@ -663,7 +691,7 @@ export class ProjectStore {
   }
 
   upsertTasks(nodes: TaskNode[], parentId: string | null = null): void {
-    if (!this.state) throw new Error("Проект не инициализирован");
+    if (!this.state) throw new Error("Project not initialized");
     for (const node of nodes) {
       const exists = Boolean(this.state.tasks[node.id]);
       let status = node.status ?? (exists ? this.state.tasks[node.id].status : "new");

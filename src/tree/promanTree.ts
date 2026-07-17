@@ -3,7 +3,8 @@ import { actorsEqual } from "../core/actor";
 import { getMetaCurrentUser } from "../core/projectMeta";
 import { ProjectStore } from "../core/store";
 import { subtreeEstimateSp } from "../core/taskMeta";
-import { statusLabel, TaskNode, TaskStatus } from "../core/types";
+import { TaskNode, TaskStatus } from "../core/types";
+import { statusLabelL10n, t } from "../i18n";
 
 
 const STATUS_ICON: Record<TaskStatus, string> = {
@@ -56,7 +57,7 @@ export class PromanTreeItem extends vscode.TreeItem {
     super(task.title, collapsible);
     this.id = task.id;
 
-    const statusText = statusLabel(task.status);
+    const statusText = statusLabelL10n(task.status);
     const spLabel = formatSpLabel(task, rollupSp);
     const isEpicSp = Boolean(task.children.length && rollupSp > 0);
     const assignee = task.assignee ? `@${task.assignee.replace(/^@/, "")}` : undefined;
@@ -73,13 +74,15 @@ export class PromanTreeItem extends vscode.TreeItem {
       task.title,
       task.description,
       `status: ${statusText} (${task.status})`,
-      spLabel ? `оценка: ${spLabel}` : "",
+      spLabel ? t("estimate: {0}", spLabel) : "",
       assignee ? `assignee: ${assignee}` : "",
-      task.tags?.length ? `теги: ${task.tags.map((t) => `#${t}`).join(" ")}` : "",
-      task.code?.length ? `код: ${task.code.join(", ")}` : "",
-      task.tests?.length ? `тесты: ${task.tests.join(", ")}` : "",
-      highlight === "match" ? "подсветка: совпадение поиска" : "",
-      highlight === "path" ? "подсветка: путь к совпадению" : "",
+      task.tags?.length
+        ? t("tags: {0}", task.tags.map((tag) => `#${tag}`).join(" "))
+        : "",
+      task.code?.length ? t("code: {0}", task.code.join(", ")) : "",
+      task.tests?.length ? t("tests: {0}", task.tests.join(", ")) : "",
+      highlight === "match" ? t("highlight: search match") : "",
+      highlight === "path" ? t("highlight: path to match") : "",
       task.dependsOn.length ? `dependsOn: ${task.dependsOn.length}` : "",
       task.source,
       task.impactHint ? `impact: ${task.impactHint}` : "",
@@ -372,7 +375,7 @@ export class PromanDecorationProvider implements vscode.FileDecorationProvider {
       return {
         badge: "●",
         color: new vscode.ThemeColor(MATCH_COLOR),
-        tooltip: "Совпадение поиска",
+        tooltip: t("Search match"),
         propagate: false,
       };
     }
@@ -380,7 +383,7 @@ export class PromanDecorationProvider implements vscode.FileDecorationProvider {
       return {
         badge: "›",
         color: new vscode.ThemeColor(PATH_COLOR),
-        tooltip: "Путь к совпадению",
+        tooltip: t("Path to match"),
         propagate: false,
       };
     }
@@ -388,7 +391,7 @@ export class PromanDecorationProvider implements vscode.FileDecorationProvider {
       return {
         badge: "Σ",
         color: new vscode.ThemeColor(EPIC_SP_COLOR),
-        tooltip: "Сумма SP по дочерним задачам",
+        tooltip: t("Sum of SP for child tasks"),
         propagate: false,
       };
     }
@@ -397,7 +400,7 @@ export class PromanDecorationProvider implements vscode.FileDecorationProvider {
     if (!colorId) return undefined;
     return {
       color: new vscode.ThemeColor(colorId),
-      tooltip: statusLabel(status),
+      tooltip: statusLabelL10n(status),
       propagate: true,
     };
   }

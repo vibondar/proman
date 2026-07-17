@@ -17,20 +17,21 @@ export const TASK_STATUSES: TaskStatus[] = [
   "blocked",
 ];
 
+/** Canonical English labels (match statusLabelL10n keys). Use statusLabelL10n for UI. */
 export function statusLabel(status: TaskStatus): string {
   switch (status) {
     case "todo":
       return "todo";
     case "new":
-      return "новая";
+      return "new";
     case "in_progress":
-      return "в работе";
+      return "in progress";
     case "done":
-      return "готово";
+      return "done";
     case "needs_rework":
-      return "доработка";
+      return "needs rework";
     case "error":
-      return "ошибка";
+      return "error";
     case "blocked":
       return "blocked";
   }
@@ -90,6 +91,8 @@ export interface GithubIssuesConfig {
   createOnAdd?: boolean;
   /** Set task status to done when linked Issue is closed (default true). */
   closeToDone?: boolean;
+  /** Use public_repo OAuth scope instead of repo (default false). */
+  publicOnly?: boolean;
 }
 
 export interface ProjectMeta {

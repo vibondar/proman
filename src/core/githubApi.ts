@@ -1,8 +1,11 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { GithubIssuesConfig } from "./types";
-
-const execFileAsync = promisify(execFile);
+import {
+  assertValidGithubOwnerRepo,
+  isValidGithubName,
+  parseGithubRemoteUrl,
+  sanitizeErrorMessage,
+} from "./githubIssueLink";
+import { gitRemoteOriginUrl } from "./gitSync";
 
 export interface GithubIssue {
   number: number;
@@ -19,12 +22,20 @@ export async function getGithubAccessToken(
   return session?.accessToken ?? null;
 }
 
+function reposPath(owner: string, repo: string, suffix: string): string {
+  const { owner: o, repo: r } = assertValidGithubOwnerRepo(owner, repo);
+  return `/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}${suffix}`;
+}
+
 export async function githubApi<T>(
   token: string,
   method: string,
   path: string,
   body?: unknown
 ): Promise<T> {
+  if (!path.startsWith("/")) {
+    throw new Error("GitHub API path must be absolute");
+  }
   const res = await fetch(`https://api.github.com${path}`, {
     method,
     headers: {
@@ -38,7 +49,9 @@ export async function githubApi<T>(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`GitHub API ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error(
+      `GitHub API ${res.status}: ${sanitizeErrorMessage(text, 200)}`
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -51,9 +64,9 @@ export async function createGithubIssue(
   title: string,
   body: string
 ): Promise<GithubIssue> {
-  return githubApi<GithubIssue>(token, "POST", `/repos/${owner}/${repo}/issues`, {
-    title,
-    body,
+  return githubApi<GithubIssue>(token, "POST", reposPath(owner, repo, "/issues"), {
+    title: title.slice(0, 256),
+    body: body.slice(0, 65536),
   });
 }
 
@@ -63,7 +76,7 @@ export async function listClosedIssues(
   repo: string,
   opts?: { since?: string; perPage?: number }
 ): Promise<GithubIssue[]> {
-  const perPage = opts?.perPage ?? 100;
+  const perPage = Math.min(100, Math.max(1, opts?.perPage ?? 100));
   const params = new URLSearchParams({
     state: "closed",
     per_page: String(perPage),
@@ -74,7 +87,7 @@ export async function listClosedIssues(
   const items = await githubApi<GithubIssue[]>(
     token,
     "GET",
-    `/repos/${owner}/${repo}/issues?${params.toString()}`
+    `${reposPath(owner, repo, "/issues")}?${params.toString()}`
   );
   return items.filter((i) => !i.pull_request);
 }
@@ -85,10 +98,13 @@ export async function getGithubIssue(
   repo: string,
   issueNumber: number
 ): Promise<GithubIssue> {
+  if (!Number.isInteger(issueNumber) || issueNumber < 1) {
+    throw new Error("Invalid issue number");
+  }
   return githubApi<GithubIssue>(
     token,
     "GET",
-    `/repos/${owner}/${repo}/issues/${issueNumber}`
+    reposPath(owner, repo, `/issues/${issueNumber}`)
   );
 }
 
@@ -96,31 +112,16 @@ export async function getGithubIssue(
 export async function detectGithubOwnerRepo(
   cwd: string
 ): Promise<{ owner: string; repo: string } | null> {
-  try {
-    const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], {
-      cwd,
-      timeout: 10_000,
-    });
-    return parseGithubRemoteUrl(stdout.toString().trim());
-  } catch {
-    return null;
-  }
-}
-
-export function parseGithubRemoteUrl(url: string): { owner: string; repo: string } | null {
-  const cleaned = url.trim().replace(/\.git$/i, "");
-  // git@github.com:owner/repo
-  let m = cleaned.match(/github\.com[:/]([^/]+)\/([^/]+)$/i);
-  if (m) return { owner: m[1], repo: m[2] };
-  // https://github.com/owner/repo
-  m = cleaned.match(/https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)/i);
-  if (m) return { owner: m[1], repo: m[2] };
-  return null;
+  const url = await gitRemoteOriginUrl(cwd);
+  if (!url) return null;
+  return parseGithubRemoteUrl(url);
 }
 
 export function isGithubIssuesEnabled(cfg: GithubIssuesConfig | undefined): boolean {
   return Boolean(
-    cfg?.enabled && cfg.owner?.trim() && cfg.repo?.trim()
+    cfg?.enabled &&
+      isValidGithubName(cfg.owner) &&
+      isValidGithubName(cfg.repo)
   );
 }
 
@@ -129,11 +130,18 @@ export function defaultGithubConfig(
   repo: string,
   partial?: Partial<GithubIssuesConfig>
 ): GithubIssuesConfig {
+  const { owner: o, repo: r } = assertValidGithubOwnerRepo(owner, repo);
   return {
     enabled: true,
-    owner,
-    repo,
+    owner: o,
+    repo: r,
     createOnAdd: partial?.createOnAdd ?? true,
     closeToDone: partial?.closeToDone ?? true,
+    publicOnly: partial?.publicOnly ?? false,
   };
+}
+
+/** VS Code GitHub auth scopes: public_repo for public-only, repo for private. */
+export function githubAuthScopes(publicOnly: boolean | undefined): string[] {
+  return publicOnly ? ["public_repo"] : ["repo"];
 }

@@ -6,6 +6,7 @@ import { AgentHandoff } from "./agent/handoff";
 import { addComment, loadComments, TaskComment } from "./core/comments";
 import { historyForTask, HistoryEntry, loadHistory } from "./core/history";
 import { getMetaCurrentUser } from "./core/projectMeta";
+import { detailPanelUi, t } from "./i18n";
 
 type DetailMsg =
   | { type: "ready" }
@@ -73,7 +74,7 @@ export class TaskDetailPanel {
     }
     const panel = vscode.window.createWebviewPanel(
       "proman.taskDetail",
-      "Proman · Задача",
+      t("Proman · Task"),
       column,
       { enableScripts: true, retainContextWhenHidden: true }
     );
@@ -103,7 +104,9 @@ export class TaskDetailPanel {
             dependsOn: msg.dependsOn,
           });
           if (!impact.ok) {
-            void vscode.window.showErrorMessage(impact.error ?? "Цикл зависимостей");
+            void vscode.window.showErrorMessage(
+              impact.error ?? t("Dependency cycle")
+            );
             await this.postState();
             return;
           }
@@ -117,7 +120,7 @@ export class TaskDetailPanel {
             tags: msg.tags
               ? msg.tags
                   .split(/[\s,]+/)
-                  .map((t) => t.replace(/^#/, "").trim())
+                  .map((tag) => tag.replace(/^#/, "").trim())
                   .filter(Boolean)
               : undefined,
           });
@@ -125,7 +128,7 @@ export class TaskDetailPanel {
           await this.store.save();
           this.onChanged();
           this.panel.title = `Proman · ${msg.title}`;
-          void vscode.window.showInformationMessage("Proman: задача сохранена");
+          void vscode.window.showInformationMessage(t("Proman: task saved"));
           await this.postState();
           break;
         }
@@ -156,16 +159,18 @@ export class TaskDetailPanel {
           break;
         case "addComment": {
           const root = this.store.workspaceRoot;
-          if (!root) throw new Error("Нет workspace");
+          if (!root) throw new Error("No workspace");
           if (!this.store.hasCurrentUser()) {
             void vscode.window.showWarningMessage(
-              "Proman: сначала укажите текущего пользователя (команда «Set Current User»)"
+              t(
+                "Proman: set the current user first (command “Set Current User”)"
+              )
             );
             return;
           }
           const author = this.store.currentUser();
           const comment = await addComment(root, this.taskId, author, msg.text);
-          if (!comment) throw new Error("Не удалось сохранить комментарий");
+          if (!comment) throw new Error("Failed to save comment");
           this.store.recordCommentHistory(this.taskId, author, comment.text);
           await this.store.save();
           this.onChanged();
@@ -175,7 +180,9 @@ export class TaskDetailPanel {
         case "assignToMe": {
           if (!this.store.hasCurrentUser()) {
             void vscode.window.showWarningMessage(
-              "Proman: сначала укажите текущего пользователя (команда «Set Current User»)"
+              t(
+                "Proman: set the current user first (command “Set Current User”)"
+              )
             );
             return;
           }
@@ -186,19 +193,29 @@ export class TaskDetailPanel {
           break;
         }
         case "pickAssignee": {
+          const ui = detailPanelUi();
           const known = this.store.listAssignees();
           const picked = await vscode.window.showQuickPick(
             [
               ...(this.store.hasCurrentUser()
-                ? [{ label: `@${this.store.currentUser()}`, description: "я", value: this.store.currentUser() }]
+                ? [
+                    {
+                      label: `@${this.store.currentUser()}`,
+                      description: ui.me,
+                      value: this.store.currentUser(),
+                    },
+                  ]
                 : []),
               ...known
-                .filter((a) => !this.store.hasCurrentUser() || a !== this.store.currentUser())
+                .filter(
+                  (a) =>
+                    !this.store.hasCurrentUser() || a !== this.store.currentUser()
+                )
                 .map((a) => ({ label: `@${a}`, value: a })),
-              { label: "Ввести вручную…", value: "__custom__" },
-              { label: "Снять назначение", value: "__clear__" },
+              { label: ui.enterManually, value: "__custom__" },
+              { label: ui.clearAssignee, value: "__clear__" },
             ],
-            { title: "Назначить задачу" }
+            { title: ui.assignTitle }
           );
           if (!picked) return;
           let assignee: string | undefined;
@@ -206,7 +223,7 @@ export class TaskDetailPanel {
             assignee = undefined;
           } else if (picked.value === "__custom__") {
             const typed = await vscode.window.showInputBox({
-              prompt: "Assignee (без @)",
+              prompt: ui.assigneePrompt,
               placeHolder: "alice",
             });
             if (typed === undefined) return;
@@ -223,7 +240,7 @@ export class TaskDetailPanel {
       }
     } catch (e) {
       void vscode.window.showErrorMessage(
-        `Proman: ${e instanceof Error ? e.message : String(e)}`
+        t("Proman: {0}", e instanceof Error ? e.message : String(e))
       );
     }
   }
@@ -242,24 +259,30 @@ export class TaskDetailPanel {
 
   private async postState(): Promise<void> {
     await this.loadSideData();
+    const ui = detailPanelUi();
     const state = this.store.current;
     const task = state?.tasks[this.taskId];
     if (!task || !state) {
-      void this.panel.webview.postMessage({ type: "missing" });
+      void this.panel.webview.postMessage({ type: "missing", ui });
       return;
     }
     const others = Object.values(state.tasks)
-      .filter((t) => t.id !== task.id)
-      .map((t) => ({ id: t.id, title: t.title, status: t.status }));
+      .filter((node) => node.id !== task.id)
+      .map((node) => ({ id: node.id, title: node.title, status: node.status }));
     const blocked = Object.values(state.tasks)
-      .filter((t) => t.dependsOn.includes(task.id))
-      .map((t) => t.title);
+      .filter((node) => node.dependsOn.includes(task.id))
+      .map((node) => node.title);
     const relations = others
-      .filter((o) => task.dependsOn.includes(o.id) || state.tasks[o.id]?.dependsOn.includes(task.id))
+      .filter(
+        (o) =>
+          task.dependsOn.includes(o.id) ||
+          state.tasks[o.id]?.dependsOn.includes(task.id)
+      )
       .map((o) => this.deps.describeRelation(state, task.id, o.id));
 
     void this.panel.webview.postMessage({
       type: "task",
+      ui,
       task,
       others,
       blocked,
@@ -273,8 +296,9 @@ export class TaskDetailPanel {
 
   private html(): string {
     const nonce = String(Date.now());
+    const loading = detailPanelUi().loading;
     return `<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
@@ -330,13 +354,21 @@ export class TaskDetailPanel {
 </style>
 </head>
 <body>
-  <div id="root" class="missing">Загрузка…</div>
+  <div id="root" class="missing">${loading.replace(/</g, "&lt;")}</div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const root = document.getElementById('root');
+    let ui = {};
 
     function esc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fmt(template) {
+      const args = Array.prototype.slice.call(arguments, 1);
+      return String(template || '').replace(/\\{(\\d+)\\}/g, function(_, i) {
+        return args[Number(i)] != null ? String(args[Number(i)]) : '';
+      });
     }
 
     function fmtTime(iso) {
@@ -348,95 +380,101 @@ export class TaskDetailPanel {
 
     function histLine(h) {
       if (h.kind === 'status') {
-        return 'статус: ' + esc(h.from || '—') + ' → ' + esc(h.to || '—');
+        return fmt(ui.histStatus, esc(h.from || '—'), esc(h.to || '—'));
       }
       if (h.kind === 'assignee') {
-        return 'назначение: ' + esc(h.from ? '@'+h.from : '—') + ' → ' + esc(h.to ? '@'+h.to : '—');
+        return fmt(ui.histAssignee, esc(h.from ? '@'+h.from : '—'), esc(h.to ? '@'+h.to : '—'));
       }
-      return 'комментарий: ' + esc(h.message || '');
+      return fmt(ui.histComment, esc(h.message || ''));
     }
 
     function render(data) {
+      if (data && data.ui) ui = data.ui;
       if (!data || data.type === 'missing') {
-        root.innerHTML = '<div class="missing">Задача не найдена. Выберите узел в дереве Proman.</div>';
+        root.innerHTML = '<div class="missing">'+esc(ui.missing || '')+'</div>';
         return;
       }
-      const t = data.task;
+      const task = data.task;
       const comments = data.comments || [];
       const history = data.history || [];
       const me = data.currentUser;
       const opts = data.others.map(o =>
-        '<option value="'+esc(o.id)+'"'+(t.dependsOn.includes(o.id)?' selected':'')+'>'+esc(o.title)+' ('+o.status+')</option>'
+        '<option value="'+esc(o.id)+'"'+(task.dependsOn.includes(o.id)?' selected':'')+'>'+esc(o.title)+' ('+o.status+')</option>'
       ).join('');
       const commentHtml = comments.length
         ? comments.map(c =>
             '<div class="comment"><span class="who">@'+esc(c.author)+'</span><span class="when">'+esc(fmtTime(c.at))+'</span><div class="body">'+esc(c.text)+'</div></div>'
           ).join('')
-        : '<div class="empty">Пока нет комментариев</div>';
+        : '<div class="empty">'+esc(ui.noComments)+'</div>';
       const histHtml = history.length
         ? history.slice().reverse().map(h =>
             '<div class="hist"><span class="who">@'+esc(h.actor)+'</span><span class="when">'+esc(fmtTime(h.at))+'</span><div>'+histLine(h)+'</div></div>'
           ).join('')
-        : '<div class="empty">История пуста</div>';
+        : '<div class="empty">'+esc(ui.historyEmpty)+'</div>';
+      const youBit = me ? fmt(ui.you, esc(me)) : esc(ui.userUnset);
+      const branchBit = fmt(ui.branchProgress, data.progress.done, data.progress.total);
+      const blocksHint = data.blocked.length
+        ? fmt(ui.blocks, esc(data.blocked.join(', ')))
+        : esc(ui.blocksNone);
       root.innerHTML = \`
-        <h1 id="heading">\${esc(t.title)}</h1>
-        <div class="sub">id: \${esc(t.id)} · source: \${esc(t.source)} · ветка: \${data.progress.done}/\${data.progress.total}\${me ? ' · вы: @'+esc(me) : ' · пользователь не задан'}</div>
-        <label>Название</label>
-        <input id="title" value="\${esc(t.title)}" />
-        <label>Статус</label>
+        <h1 id="heading">\${esc(task.title)}</h1>
+        <div class="sub">id: \${esc(task.id)} · source: \${esc(task.source)} · \${branchBit} · \${youBit}</div>
+        <label>\${esc(ui.title)}</label>
+        <input id="title" value="\${esc(task.title)}" />
+        <label>\${esc(ui.status)}</label>
         <select id="status">
-          <option value="todo" \${t.status==='todo'?'selected':''}>todo</option>
-          <option value="new" \${t.status==='new'?'selected':''}>новая (синяя)</option>
-          <option value="in_progress" \${t.status==='in_progress'?'selected':''}>in_progress</option>
-          <option value="done" \${t.status==='done'?'selected':''}>готово (зелёная)</option>
-          <option value="needs_rework" \${t.status==='needs_rework'?'selected':''}>доработка (жёлтая)</option>
-          <option value="error" \${t.status==='error'?'selected':''}>ошибка (красная)</option>
-          <option value="blocked" \${t.status==='blocked'?'selected':''}>blocked</option>
+          <option value="todo" \${task.status==='todo'?'selected':''}>\${esc(ui.statusTodo)}</option>
+          <option value="new" \${task.status==='new'?'selected':''}>\${esc(ui.statusNew)}</option>
+          <option value="in_progress" \${task.status==='in_progress'?'selected':''}>\${esc(ui.statusInProgress)}</option>
+          <option value="done" \${task.status==='done'?'selected':''}>\${esc(ui.statusDone)}</option>
+          <option value="needs_rework" \${task.status==='needs_rework'?'selected':''}>\${esc(ui.statusRework)}</option>
+          <option value="error" \${task.status==='error'?'selected':''}>\${esc(ui.statusError)}</option>
+          <option value="blocked" \${task.status==='blocked'?'selected':''}>\${esc(ui.statusBlocked)}</option>
         </select>
         <div class="row meta-row">
           <div>
-            <label>Оценка SP</label>
-            <input id="estimateSp" type="number" min="0" step="0.5" value="\${t.estimateSp != null ? t.estimateSp : ''}" placeholder="3" />
+            <label>\${esc(ui.estimateSp)}</label>
+            <input id="estimateSp" type="number" min="0" step="0.5" value="\${task.estimateSp != null ? task.estimateSp : ''}" placeholder="3" />
           </div>
           <div>
-            <label>Часы</label>
-            <input id="estimateHours" type="number" min="0" step="0.5" value="\${t.estimateHours != null ? t.estimateHours : ''}" placeholder="2" />
+            <label>\${esc(ui.hours)}</label>
+            <input id="estimateHours" type="number" min="0" step="0.5" value="\${task.estimateHours != null ? task.estimateHours : ''}" placeholder="2" />
           </div>
           <div>
-            <label>Assignee</label>
-            <input id="assignee" value="\${esc(t.assignee||'')}" placeholder="@alice" />
+            <label>\${esc(ui.assignee)}</label>
+            <input id="assignee" value="\${esc(task.assignee||'')}" placeholder="@alice" />
           </div>
         </div>
         <div class="row" style="margin-top:8px">
-          <button class="secondary" id="assignMe">Назначить на меня</button>
-          <button class="secondary" id="pickAssignee">Выбрать assignee…</button>
+          <button class="secondary" id="assignMe">\${esc(ui.assignToMe)}</button>
+          <button class="secondary" id="pickAssignee">\${esc(ui.pickAssignee)}</button>
         </div>
-        <label>Теги (через пробел)</label>
-        <input id="tags" value="\${esc((t.tags||[]).map(function(x){return '#'+x;}).join(' '))}" placeholder="#backend #api" />
-        <label>Описание</label>
-        <textarea id="desc">\${esc(t.description||'')}</textarea>
-        <label>Зависит от (Cmd/Ctrl + клик)</label>
+        <label>\${esc(ui.tags)}</label>
+        <input id="tags" value="\${esc((task.tags||[]).map(function(x){return '#'+x;}).join(' '))}" placeholder="#backend #api" />
+        <label>\${esc(ui.description)}</label>
+        <textarea id="desc">\${esc(task.description||'')}</textarea>
+        <label>\${esc(ui.dependsOn)}</label>
         <select id="depends" multiple>\${opts}</select>
-        <div class="hint">\${data.blocked.length ? 'Блокирует: '+esc(data.blocked.join(', ')) : 'Никого не блокирует'}</div>
+        <div class="hint">\${blocksHint}</div>
         <div class="hint">\${(data.relations||[]).map(esc).join('<br/>')}</div>
-        \${t.impactHint ? '<div class="hint">Impact: '+esc(t.impactHint)+'</div>' : ''}
+        \${task.impactHint ? '<div class="hint">Impact: '+esc(task.impactHint)+'</div>' : ''}
         <div class="row">
-          <button id="save">Сохранить</button>
-          <button class="secondary" id="addChild">+ Подзадача</button>
-          <button class="secondary" id="run">Выполнить в Agent</button>
-          <button class="secondary" id="copy">Копировать промпт</button>
-          <button class="danger" id="del">Удалить</button>
+          <button id="save">\${esc(ui.save)}</button>
+          <button class="secondary" id="addChild">\${esc(ui.addChild)}</button>
+          <button class="secondary" id="run">\${esc(ui.runAgent)}</button>
+          <button class="secondary" id="copy">\${esc(ui.copyPrompt)}</button>
+          <button class="danger" id="del">\${esc(ui.delete)}</button>
         </div>
 
-        <h2>💬 Комментарии (\${comments.length})</h2>
+        <h2>\${esc(fmt(ui.comments, comments.length))}</h2>
         <div class="comments">\${commentHtml}</div>
-        <label>Новый комментарий</label>
-        <textarea id="commentText" placeholder="Текст комментария…"></textarea>
+        <label>\${esc(ui.newComment)}</label>
+        <textarea id="commentText" placeholder="\${esc(ui.commentPlaceholder)}"></textarea>
         <div class="row" style="margin-top:8px">
-          <button id="addComment">Добавить комментарий</button>
+          <button id="addComment">\${esc(ui.addComment)}</button>
         </div>
 
-        <h2>История</h2>
+        <h2>\${esc(ui.history)}</h2>
         <div class="history">\${histHtml}</div>
       \`;
       document.getElementById('save').onclick = () => {
@@ -456,13 +494,13 @@ export class TaskDetailPanel {
         });
       };
       document.getElementById('addChild').onclick = () => {
-        const title = prompt('Название подзадачи');
+        const title = prompt(ui.promptChild);
         if (title) vscode.postMessage({ type: 'addChild', title });
       };
       document.getElementById('run').onclick = () => vscode.postMessage({ type: 'runAgent' });
       document.getElementById('copy').onclick = () => vscode.postMessage({ type: 'copyPrompt' });
       document.getElementById('del').onclick = () => {
-        const cascade = confirm('Удалить с подзадачами?\\nOK = каскад, Отмена = поднять детей');
+        const cascade = confirm(ui.confirmDelete);
         vscode.postMessage({ type: 'delete', mode: cascade ? 'cascade' : 'promote' });
       };
       document.getElementById('addComment').onclick = () => {

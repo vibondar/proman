@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ProjectStore } from "../core/store";
 import { DependencyEngine } from "../core/dependencyEngine";
+import { t } from "../i18n";
 
 export class AgentHandoff {
   constructor(
@@ -10,86 +11,108 @@ export class AgentHandoff {
 
   buildTaskPrompt(taskId: string): string {
     const state = this.store.current;
-    if (!state) throw new Error("Проект Proman не инициализирован");
+    if (!state) throw new Error("Proman project is not initialized");
     const task = state.tasks[taskId];
-    if (!task) throw new Error("Задача не найдена");
+    if (!task) throw new Error("Task not found");
 
+    const none = t("(none)");
     const blockers = task.dependsOn
       .map((id) => state.tasks[id])
       .filter(Boolean)
-      .map((t) => `- [${t!.status}] ${t!.title} (${t!.id})`)
+      .map((node) => `- [${node!.status}] ${node!.title} (${node!.id})`)
       .join("\n");
 
     const blocked = Object.values(state.tasks)
-      .filter((t) => t.dependsOn.includes(taskId))
-      .map((t) => `- [${t.status}] ${t.title} (${t.id})`)
+      .filter((node) => node.dependsOn.includes(taskId))
+      .map((node) => `- [${node.status}] ${node.title} (${node.id})`)
       .join("\n");
 
     const children = task.children
       .map((id) => state.tasks[id])
       .filter(Boolean)
-      .map((t) => `- [${t!.status}] ${t!.title}`)
+      .map((node) => `- [${node!.status}] ${node!.title}`)
       .join("\n");
 
     const relations = Object.values(state.tasks)
-      .filter((t) => t.id !== taskId && (t.dependsOn.includes(taskId) || task.dependsOn.includes(t.id)))
-      .map((t) => this.deps.describeRelation(state, taskId, t.id))
+      .filter(
+        (node) =>
+          node.id !== taskId &&
+          (node.dependsOn.includes(taskId) || task.dependsOn.includes(node.id))
+      )
+      .map((node) => this.deps.describeRelation(state, taskId, node.id))
       .join("\n");
 
-    return `# Proman: выполнить задачу
+    return t(
+      `# Proman: run task
 
-Ты работаешь в проекте через расширение Proman. Источник правды — дерево задач.
+You are working in a project via the Proman extension. The task tree is the source of truth.
 
-## Задача
-- **id:** \`${task.id}\`
-- **title:** ${task.title}
-- **status:** ${task.status}
-- **source:** ${task.source}
+## Task
+- **id:** \`{0}\`
+- **title:** {1}
+- **status:** {2}
+- **source:** {3}
 
-### Описание
-${task.description || "(нет)"}
+### Description
+{4}
 
-### Подзадачи
-${children || "(нет)"}
+### Subtasks
+{5}
 
-### Зависит от
-${blockers || "(нет)"}
+### Depends on
+{6}
 
-### Блокирует
-${blocked || "(нет)"}
+### Blocks
+{7}
 
-### Влияние на связанные фичи
-${relations || task.impactHint || "(нет явных связей)"}
+### Impact on related features
+{8}
 
-## Инструкции
-1. Сначала при необходимости вызови MCP/команду \`proman_get_task\` с taskId=\`${task.id}\` для актуального снимка.
-2. Реализуй изменения в кодовой базе **только в рамках этой задачи**.
-3. Учитывай зависимости: не ломай задачи из «Блокирует».
-4. По завершении вызови \`proman_set_task_status\` с одним из:
-   - \`done\` — готово
-   - \`needs_rework\` — сделано, но нужна доработка
-   - \`error\` — ошибка / не удалось
-   - \`in_progress\` — остались хвосты
-5. Если обнаружил влияние на другую фичу — \`proman_report_impact\` с кратким текстом.
+## Instructions
+1. If needed, first call MCP/command \`proman_get_task\` with taskId=\`{0}\` for an up-to-date snapshot.
+2. Implement code changes **only within this task**.
+3. Respect dependencies: do not break tasks listed under “Blocks”.
+4. When finished, call \`proman_set_task_status\` with one of:
+   - \`done\` — finished
+   - \`needs_rework\` — done but needs rework
+   - \`error\` — error / could not complete
+   - \`in_progress\` — leftover work remains
+5. If you find impact on another feature — \`proman_report_impact\` with a short note.
 
-Начни с краткого плана, затем правь код.
-`;
+Start with a brief plan, then edit the code.
+`,
+      task.id,
+      task.title,
+      task.status,
+      task.source,
+      task.description || none,
+      children || none,
+      blockers || none,
+      blocked || none,
+      relations || task.impactHint || t("(no explicit links)")
+    );
   }
 
   buildEnrichPrompt(): string {
     const state = this.store.current;
-    const planning = state?.meta.planningDir ?? "(не задана — используй .proman/imports и docs)";
-    return `# Proman: уточнить дерево задач из MD
+    const planning =
+      state?.meta.planningDir ?? t("(not set — use .proman/imports and docs)");
+    return (
+      t(
+        `# Proman: refine the task tree from MD
 
-В workspace есть planning-документы (директория: \`${planning}\`).
+The workspace has planning documents (directory: \`{0}\`).
 
-1. Вызови \`proman_list_planning_files\` и прочитай указанные MD.
-2. Вызови \`proman_get_tree\` — текущее дерево (могло быть построено парсером).
-3. Уточни иерархию, статусы и зависимости (dependsOn).
-4. Верни обновлённые узлы через \`proman_upsert_tasks\` (массив TaskNode: id, title, description, status, children, dependsOn, source).
-5. Не удаляй вручную добавленные задачи со source=manual без необходимости.
+1. Call \`proman_list_planning_files\` and read the listed MD files.
+2. Call \`proman_get_tree\` — current tree (may have been built by the parser).
+3. Refine hierarchy, statuses, and dependencies (dependsOn).
+4. Return updated nodes via \`proman_upsert_tasks\` (TaskNode array: id, title, description, status, children, dependsOn, source).
+5. Do not delete manually added tasks with source=manual unless necessary.
 
-Схема TaskNode:
+TaskNode schema:`,
+        planning
+      ) +
+      `
 \`\`\`json
 {
   "id": "string",
@@ -101,12 +124,13 @@ ${relations || task.impactHint || "(нет явных связей)"}
   "source": "md:path"
 }
 \`\`\`
-`;
+`
+    );
   }
 
   async savePrompt(taskId: string | "enrich", body: string): Promise<vscode.Uri> {
     const proman = this.store.promanUri;
-    if (!proman) throw new Error("Нет workspace");
+    if (!proman) throw new Error("No workspace");
     const dir = vscode.Uri.joinPath(proman, "prompts");
     await vscode.workspace.fs.createDirectory(dir);
     const file = vscode.Uri.joinPath(dir, `${taskId}.md`);
@@ -126,16 +150,19 @@ ${relations || task.impactHint || "(нет явных связей)"}
     const opened = await this.tryOpenCursorAgent(prompt);
     if (!opened) {
       await vscode.window.showTextDocument(file);
+      const openChat = t("Open Chat");
       const pick = await vscode.window.showInformationMessage(
-        "Промпт скопирован в буфер. Откройте Cursor Agent (Chat) и вставьте его. Tools: MCP proman_*.",
-        "Открыть Chat"
+        t(
+          "Prompt copied to clipboard. Open Cursor Agent (Chat) and paste it. Tools: MCP proman_*."
+        ),
+        openChat
       );
-      if (pick === "Открыть Chat") {
+      if (pick === openChat) {
         await this.tryOpenCursorAgent(prompt);
       }
     } else {
       vscode.window.showInformationMessage(
-        "Промпт задачи скопирован. Вставьте в Agent (Cmd+V), если чат пуст."
+        t("Task prompt copied. Paste into Agent (Cmd+V) if the chat is empty.")
       );
     }
   }
@@ -149,7 +176,7 @@ ${relations || task.impactHint || "(нет явных связей)"}
     if (!opened) {
       await vscode.window.showTextDocument(file);
       vscode.window.showInformationMessage(
-        "Промпт обогащения скопирован. Вставьте в Cursor Agent."
+        t("Enrichment prompt copied. Paste into Cursor Agent.")
       );
     }
   }
@@ -158,7 +185,7 @@ ${relations || task.impactHint || "(нет явных связей)"}
     const prompt = this.buildTaskPrompt(taskId);
     await this.savePrompt(taskId, prompt);
     await vscode.env.clipboard.writeText(prompt);
-    vscode.window.showInformationMessage("Промпт скопирован в буфер обмена");
+    vscode.window.showInformationMessage(t("Prompt copied to clipboard"));
   }
 
   private async tryOpenCursorAgent(_prompt: string): Promise<boolean> {

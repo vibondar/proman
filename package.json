@@ -1,9 +1,10 @@
 {
   "name": "proman",
   "displayName": "Proman",
-  "description": "Дерево задач в .proman/: статусы, Agent/MCP, Git sync команды, GitHub Issues. Для разработчиков Cursor/VS Code.",
+  "description": "Task tree in .proman/: statuses, Agent/MCP, team Git sync, GitHub Issues — for Cursor/VS Code developers.",
   "version": "0.3.13",
   "publisher": "proman",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -15,6 +16,7 @@
     "onView:proman.tree"
   ],
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -29,167 +31,167 @@
       "proman": [
         {
           "id": "proman.tree",
-          "name": "Project Tree"
+          "name": "%proman.views.tree.name%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "proman.tree",
-        "contents": "Нет задач в дереве.\n[Импорт MD](command:proman.importPlanningDocs)\n[Добавить задачу](command:proman.addRootTask)\n[Agent ведёт дерево](command:proman.driveTree)\n\nКлик — детали. ПКМ — подзадача / удалить / одна задача в Agent.\nDrive Mode: агент сам идёт по очереди и пишет статусы; структура — только после вашего Approve."
+        "contents": "%proman.viewsWelcome%"
       }
     ],
     "commands": [
       {
         "command": "proman.open",
-        "title": "Proman: Open",
+        "title": "%proman.command.open.title%",
         "icon": "$(list-tree)"
       },
       {
         "command": "proman.importPlanningDocs",
-        "title": "Proman: Import Planning Docs",
+        "title": "%proman.command.importPlanningDocs.title%",
         "icon": "$(file-code)"
       },
       {
         "command": "proman.setPlanningDirectory",
-        "title": "Proman: Set Planning Directory"
+        "title": "%proman.command.setPlanningDirectory.title%"
       },
       {
         "command": "proman.runTaskInAgent",
-        "title": "Proman: Run Task in Agent",
+        "title": "%proman.command.runTaskInAgent.title%",
         "icon": "$(rocket)"
       },
       {
         "command": "proman.driveTree",
-        "title": "Proman: Agent Drive Tree",
+        "title": "%proman.command.driveTree.title%",
         "icon": "$(debug-start)"
       },
       {
         "command": "proman.stopDrive",
-        "title": "Proman: Stop Drive Mode",
+        "title": "%proman.command.stopDrive.title%",
         "icon": "$(debug-stop)"
       },
       {
         "command": "proman.recalculateDependencies",
-        "title": "Proman: Recalculate Dependencies"
+        "title": "%proman.command.recalculateDependencies.title%"
       },
       {
         "command": "proman.reloadTree",
-        "title": "Proman: Reload Tree from Disk",
+        "title": "%proman.command.reloadTree.title%",
         "icon": "$(refresh)"
       },
       {
         "command": "proman.searchTree",
-        "title": "Proman: Search Tree",
+        "title": "%proman.command.searchTree.title%",
         "icon": "$(search)"
       },
       {
         "command": "proman.clearTreeSearch",
-        "title": "Proman: Clear Tree Filter",
+        "title": "%proman.command.clearTreeSearch.title%",
         "icon": "$(clear-all)"
       },
       {
         "command": "proman.toggleMyTasks",
-        "title": "Proman: Мои задачи / Все задачи",
+        "title": "%proman.command.toggleMyTasks.title%",
         "icon": "$(account)"
       },
       {
         "command": "proman.setCurrentUser",
-        "title": "Proman: Set Current User",
+        "title": "%proman.command.setCurrentUser.title%",
         "icon": "$(person)"
       },
       {
         "command": "proman.assignTask",
-        "title": "Proman: Assign Task",
+        "title": "%proman.command.assignTask.title%",
         "icon": "$(mention)"
       },
       {
         "command": "proman.gitPull",
-        "title": "Proman: Git Pull",
+        "title": "%proman.command.gitPull.title%",
         "icon": "$(cloud-download)"
       },
       {
         "command": "proman.gitPush",
-        "title": "Proman: Git Push",
+        "title": "%proman.command.gitPush.title%",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "proman.enableGitSync",
-        "title": "Proman: Enable Git Sync"
+        "title": "%proman.command.enableGitSync.title%"
       },
       {
         "command": "proman.configureGitSync",
-        "title": "Proman: Configure Git Sync"
+        "title": "%proman.command.configureGitSync.title%"
       },
       {
         "command": "proman.enableGithubIssues",
-        "title": "Proman: Enable GitHub Issues",
+        "title": "%proman.command.enableGithubIssues.title%",
         "icon": "$(github)"
       },
       {
         "command": "proman.configureGithubIssues",
-        "title": "Proman: Configure GitHub Issues"
+        "title": "%proman.command.configureGithubIssues.title%"
       },
       {
         "command": "proman.syncGithubIssues",
-        "title": "Proman: Sync Closed GitHub Issues",
+        "title": "%proman.command.syncGithubIssues.title%",
         "icon": "$(sync)"
       },
       {
         "command": "proman.copyAgentPrompt",
-        "title": "Proman: Copy Agent Prompt"
+        "title": "%proman.command.copyAgentPrompt.title%"
       },
       {
         "command": "proman.enrichTreeFromMd",
-        "title": "Proman: Enrich Tree via Agent"
+        "title": "%proman.command.enrichTreeFromMd.title%"
       },
       {
         "command": "proman.addRootTask",
-        "title": "Proman: Add Root Task",
+        "title": "%proman.command.addRootTask.title%",
         "icon": "$(add)"
       },
       {
         "command": "proman.addChildTask",
-        "title": "Proman: Add Child Task",
+        "title": "%proman.command.addChildTask.title%",
         "icon": "$(add)"
       },
       {
         "command": "proman.deleteTask",
-        "title": "Proman: Delete Task",
+        "title": "%proman.command.deleteTask.title%",
         "icon": "$(trash)"
       },
       {
         "command": "proman.openTaskDetails",
-        "title": "Proman: Open Task Details",
+        "title": "%proman.command.openTaskDetails.title%",
         "icon": "$(edit)"
       },
       {
         "command": "proman.setStatusTodo",
-        "title": "Proman: Status → todo"
+        "title": "%proman.command.setStatusTodo.title%"
       },
       {
         "command": "proman.setStatusNew",
-        "title": "Proman: Status → new (синяя)"
+        "title": "%proman.command.setStatusNew.title%"
       },
       {
         "command": "proman.setStatusInProgress",
-        "title": "Proman: Status → in_progress"
+        "title": "%proman.command.setStatusInProgress.title%"
       },
       {
         "command": "proman.setStatusDone",
-        "title": "Proman: Status → done (зелёная)"
+        "title": "%proman.command.setStatusDone.title%"
       },
       {
         "command": "proman.setStatusNeedsRework",
-        "title": "Proman: Status → needs_rework (жёлтая)"
+        "title": "%proman.command.setStatusNeedsRework.title%"
       },
       {
         "command": "proman.setStatusError",
-        "title": "Proman: Status → error (красная)"
+        "title": "%proman.command.setStatusError.title%"
       },
       {
         "command": "proman.selectTask",
-        "title": "Proman: Select Task"
+        "title": "%proman.command.selectTask.title%"
       }
     ],
     "menus": {
@@ -329,7 +331,7 @@
         "proman.autoDiscoverOnOpen": {
           "type": "boolean",
           "default": true,
-          "description": "Ask to import planning docs when opening a workspace without .proman/"
+          "description": "%proman.config.autoDiscover%"
         }
       }
     }

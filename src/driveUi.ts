@@ -7,6 +7,7 @@ import {
 import { parseStructureOps } from "./core/proposalOps";
 import { wsMkdir, wsReadUri } from "./core/workspaceIo";
 import { PromanMcpServer } from "./mcp/promanMcp";
+import { t } from "./i18n";
 
 /**
  * Watch .proman/proposals for pending items created by disk MCP server
@@ -35,29 +36,33 @@ export function startProposalWatcher(
         if (proposal.status !== "pending") return;
         const opsCheck = parseStructureOps(proposal.ops);
         if (!opsCheck.ok) {
-          vscode.window.showErrorMessage(`Proman: некорректный proposal — ${opsCheck.error}`);
+          vscode.window.showErrorMessage(
+            t("Proman: invalid proposal — {0}", opsCheck.error)
+          );
           return;
         }
         proposal.ops = opsCheck.ops;
         handling = true;
+        const accept = t("Accept");
+        const reject = t("Reject");
         const choice = await vscode.window.showInformationMessage(
-          `Proman Agent предлагает изменить дерево:\n${proposal.summary}`,
+          t("Proman Agent proposes a tree change:\n{0}", proposal.summary),
           { modal: true, detail: proposal.rationale || undefined },
-          "Принять",
-          "Отклонить"
+          accept,
+          reject
         );
         const rootDir = storeWorkspaceRoot();
         if (!rootDir) return;
-        if (choice === "Принять") {
+        if (choice === accept) {
           await applyProposalToDisk(rootDir, proposal);
           proposal.status = "accepted";
           await writeProposal(rootDir, proposal);
           await onApplied();
-          vscode.window.showInformationMessage("Proman: предложение агента принято");
-        } else if (choice === "Отклонить") {
+          vscode.window.showInformationMessage(t("Proman: agent proposal accepted"));
+        } else if (choice === reject) {
           proposal.status = "rejected";
           await writeProposal(rootDir, proposal);
-          vscode.window.showInformationMessage("Proman: предложение отклонено");
+          vscode.window.showInformationMessage(t("Proman: proposal rejected"));
         }
       } catch {
         /* ignore parse races */
@@ -102,11 +107,15 @@ export async function startDriveMode(mcp: PromanMcpServer): Promise<void> {
   const drive = mcp.getDrive();
   const file = await drive.startDriveHandoff();
   await tryOpenAgent();
+  const openPrompt = t("Open prompt");
+  const stopDrive = t("Stop Drive");
   const pick = await vscode.window.showInformationMessage(
-    "Drive Mode: промпт в буфере. Вставьте в Agent (Cmd+V) и отправьте. Статусы пишутся в дерево; структура — только после Approve.",
-    "Открыть промпт",
-    "Стоп Drive"
+    t(
+      "Drive Mode: prompt is on the clipboard. Paste into Agent (Cmd+V) and send. Statuses are written to the tree; structure only after Approve."
+    ),
+    openPrompt,
+    stopDrive
   );
-  if (pick === "Открыть промпт") await vscode.window.showTextDocument(file);
-  if (pick === "Стоп Drive") drive.stop();
+  if (pick === openPrompt) await vscode.window.showTextDocument(file);
+  if (pick === stopDrive) drive.stop();
 }
