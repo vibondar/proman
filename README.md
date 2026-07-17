@@ -15,6 +15,7 @@
 Разработчики и небольшие команды, которые хотят:
 
 - вести план рядом с кодом (файлы в репозитории);
+- **переносить план разработки** между проектами/репозиториями **с сохранением текущего прогресса** (экспорт в MD → импорт);
 - отдавать задачи Cursor Agent с контекстом и статусами;
 - синхронизироваться через Git / GitHub Issues без тяжёлого PM-стека.
 
@@ -53,6 +54,18 @@
 
 В **командном** репозитории коммитьте `.proman/` (не добавляйте его в `.gitignore`).
 
+### Переносимость плана с прогрессом
+
+План разработки можно **вынести из одного workspace и поднять в другом**, не теряя отмеченный прогресс:
+
+1. На секции дерева в панели Proman: **Export Tree to Markdown** (или ПКМ → экспорт).
+2. Сохраните `.md` — в файл попадут иерархия, описания, зависимости, assignee и **текущие статусы** (`done` → `- [x]`, остальные через `Status: …` при необходимости).
+3. В целевом проекте: **Import Planning Docs** — дерево восстановится с прогрессом.
+
+Так же удобно бэкапить план перед экспериментом или передавать roadmap коллеге без копирования всего `.proman/`.
+
+Удаление секции: **Delete Task Tree** — с предупреждением, что прогресс в этом дереве **не сохранится** (при необходимости сначала сделайте экспорт).
+
 ---
 
 ## Возможности
@@ -60,10 +73,12 @@
 ### Дерево и статусы
 
 - Панель дерева: статусы `todo` / `new` / `in_progress` / `done` / `needs_rework` / `error` / `blocked`
+- Несколько деревьев (секций) в одном проекте — по одному на импортированный план
 - Цвета иконок, Σ SP на эпиках, assignee в строке
 - Detail panel: описание, оценки, теги, зависимости, assign, комментарии, история
 - Поиск по дереву + фильтр пути
 - **👤 Мои задачи** — фильтр по `team.currentUser`
+- **Экспорт секции в MD** с текущим прогрессом; **удаление дерева** с подтверждением
 
 ### Планирование из Markdown
 
@@ -71,6 +86,7 @@
 - Frontmatter `type: plan` → id `plan_1`, `plan_2`, …
 - Шаблон для генерации списка задач: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — его стоит предлагать Cursor как образец формата
 - Пример meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
+- Round-trip: экспорт → MD → импорт **сохраняет прогресс** (чекбоксы + строки `Status:`)
 
 ### Agent / Drive Mode
 
@@ -134,6 +150,8 @@
 |---------|----------|
 | Proman: Open | Фокус на панели |
 | Proman: Import Planning Docs | Импорт MD |
+| Proman: Export Tree to Markdown | Экспорт секции в MD **с текущим прогрессом** |
+| Proman: Delete Task Tree | Удалить секцию (прогресс не сохраняется) |
 | Proman: Set Current User | `team.currentUser` |
 | Proman: Мои задачи / Все | Фильтр assignee |
 | Proman: Assign Task | Назначение |
@@ -163,7 +181,7 @@ npm run install:cursor # package + install в Cursor
 
 ### Тесты
 
-Unit-тесты на pure core: pathSafety, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
+Unit-тесты на pure core: pathSafety, forest/security, MD export/import, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
 
 ```bash
 npm test

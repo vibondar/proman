@@ -15,6 +15,7 @@ Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHu
 Developers and small teams who want to:
 
 - keep the plan next to the code (files in the repo);
+- **move a development plan** between projects/repos **with current progress preserved** (export to MD → import);
 - hand tasks to Cursor Agent with context and statuses;
 - sync via Git / GitHub Issues without a heavy PM stack.
 
@@ -53,6 +54,18 @@ Each imported file becomes a **section** in the Proman panel. Statuses live in `
 
 In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 
+### Portable plans with progress
+
+You can **take a plan out of one workspace and restore it in another** without losing marked progress:
+
+1. On a tree section in the Proman panel: **Export Tree to Markdown** (or context menu → export).
+2. Save the `.md` — it includes hierarchy, descriptions, dependencies, assignee, and **current statuses** (`done` → `- [x]`, others via `Status: …` when needed).
+3. In the target project: **Import Planning Docs** — the tree comes back with progress.
+
+Useful for backups before experiments or sharing a roadmap without copying all of `.proman/`.
+
+Removing a section: **Delete Task Tree** — warns that progress in that tree **will not be kept** (export first if you need it).
+
 ---
 
 ## Features
@@ -60,10 +73,12 @@ In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 ### Tree and statuses
 
 - Tree panel: statuses `todo` / `new` / `in_progress` / `done` / `needs_rework` / `error` / `blocked`
+- Multiple trees (sections) in one project — one per imported plan
 - Icon colors, Σ SP on epics, assignee in the row
 - Detail panel: description, estimates, tags, dependencies, assign, comments, history
 - Tree search + path highlight
 - **My tasks** — filter by `team.currentUser`
+- **Export section to MD** with current progress; **delete tree** with confirmation
 
 ### Planning from Markdown
 
@@ -71,6 +86,7 @@ In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 - Frontmatter `type: plan` → ids `plan_1`, `plan_2`, …
 - Template for generating the task list: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — recommend this to Cursor as the format sample
 - Sample meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
+- Round-trip: export → MD → import **preserves progress** (checkboxes + `Status:` lines)
 
 ### Agent / Drive Mode
 
@@ -136,6 +152,8 @@ In `project.json`:
 |---------|--------|
 | Proman: Open | Focus the panel |
 | Proman: Import Planning Docs | Import Markdown |
+| Proman: Export Tree to Markdown | Export section to MD **with current progress** |
+| Proman: Delete Task Tree | Delete section (progress is discarded) |
 | Proman: Set Current User | `team.currentUser` |
 | Proman: My tasks / All | Assignee filter |
 | Proman: Assign Task | Assignment |
@@ -165,7 +183,7 @@ npm run install:cursor # package + install into Cursor
 
 ### Tests
 
-Unit tests for pure core: pathSafety, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
+Unit tests for pure core: pathSafety, forest/security, MD export/import, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
 
 ```bash
 npm test
