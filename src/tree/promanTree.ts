@@ -1,7 +1,10 @@
 import * as vscode from "vscode";
+import { actorsEqual } from "../core/actor";
+import { getMetaCurrentUser } from "../core/projectMeta";
 import { ProjectStore } from "../core/store";
 import { subtreeEstimateSp } from "../core/taskMeta";
 import { statusLabel, TaskNode, TaskStatus } from "../core/types";
+
 
 const STATUS_ICON: Record<TaskStatus, string> = {
   todo: "circle-large-outline",
@@ -143,6 +146,8 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private selectedId: string | null = null;
   private filterQuery = "";
+  /** Show only tasks assigned to project currentUser (+ ancestors). */
+  private myTasksOnly = false;
   /** Task ids that match filter or are ancestors of matches */
   private visibleIds: Set<string> | null = null;
   private matchIds = new Set<string>();
@@ -156,6 +161,10 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
     return this.filterQuery;
   }
 
+  isMyTasksOnly(): boolean {
+    return this.myTasksOnly;
+  }
+
   hasPathHighlight(): boolean {
     return this.matchIds.size > 0 || this.pathIds.size > 0;
   }
@@ -166,8 +175,20 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
     this.refresh();
   }
 
+  setMyTasksOnly(on: boolean): void {
+    this.myTasksOnly = on;
+    this.rebuildVisibleAndHighlight();
+    this.refresh();
+  }
+
+  toggleMyTasksOnly(): boolean {
+    this.setMyTasksOnly(!this.myTasksOnly);
+    return this.myTasksOnly;
+  }
+
   clearFilter(): void {
     this.filterQuery = "";
+    this.myTasksOnly = false;
     this.visibleIds = null;
     this.matchIds.clear();
     this.pathIds.clear();
@@ -202,17 +223,26 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
   }
 
   getMatchCount(): number {
-    if (!this.filterQuery || !this.store.current) return 0;
-    return Object.values(this.store.current.tasks).filter((t) =>
-      taskMatchesQuery(t, this.filterQuery)
-    ).length;
+    if (!this.store.current) return 0;
+    if (!this.filterQuery && !this.myTasksOnly) return 0;
+    return Object.values(this.store.current.tasks).filter((t) => this.taskMatchesFilters(t))
+      .length;
   }
 
   refresh(): void {
-    if (this.filterQuery) {
+    if (this.filterQuery || this.myTasksOnly) {
       this.rebuildVisibleAndHighlight();
     }
     this._onDidChangeTreeData.fire();
+  }
+
+  private taskMatchesFilters(task: TaskNode): boolean {
+    if (this.filterQuery && !taskMatchesQuery(task, this.filterQuery)) return false;
+    if (this.myTasksOnly) {
+      const me = getMetaCurrentUser(this.store.current?.meta);
+      if (!me || !actorsEqual(task.assignee, me)) return false;
+    }
+    return true;
   }
 
   getSelectedId(): string | null {
@@ -291,9 +321,9 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
 
   private rebuildVisibleAndHighlight(): void {
     const state = this.store.current;
-    if (!state || !this.filterQuery) {
+    if (!state || (!this.filterQuery && !this.myTasksOnly)) {
       this.visibleIds = null;
-      // Keep focus path highlight if set without filter
+      // Keep focus path highlight if set without text/my filter
       return;
     }
 
@@ -303,7 +333,7 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanTreeIte
     const paths = new Set<string>();
 
     for (const t of Object.values(state.tasks)) {
-      if (!taskMatchesQuery(t, this.filterQuery)) continue;
+      if (!this.taskMatchesFilters(t)) continue;
       matches.add(t.id);
       let id: string | null = t.id;
       while (id) {

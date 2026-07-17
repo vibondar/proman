@@ -3,6 +3,9 @@ import { ProjectStore } from "./core/store";
 import { DependencyEngine } from "./core/dependencyEngine";
 import { TaskStatus } from "./core/types";
 import { AgentHandoff } from "./agent/handoff";
+import { addComment, loadComments, TaskComment } from "./core/comments";
+import { historyForTask, HistoryEntry, loadHistory } from "./core/history";
+import { getMetaCurrentUser } from "./core/projectMeta";
 
 type DetailMsg =
   | { type: "ready" }
@@ -20,13 +23,18 @@ type DetailMsg =
   | { type: "delete"; mode: "promote" | "cascade" }
   | { type: "addChild"; title: string }
   | { type: "runAgent" }
-  | { type: "copyPrompt" };
+  | { type: "copyPrompt" }
+  | { type: "addComment"; text: string }
+  | { type: "assignToMe" }
+  | { type: "pickAssignee" };
 
 export class TaskDetailPanel {
   public static current: TaskDetailPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private taskId: string;
   private disposables: vscode.Disposable[] = [];
+  private comments: TaskComment[] = [];
+  private history: HistoryEntry[] = [];
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -45,7 +53,7 @@ export class TaskDetailPanel {
       null,
       this.disposables
     );
-    this.store.onDidChange(() => this.postState());
+    this.store.onDidChange(() => void this.postState());
   }
 
   static show(
@@ -60,7 +68,7 @@ export class TaskDetailPanel {
     if (TaskDetailPanel.current) {
       TaskDetailPanel.current.taskId = taskId;
       TaskDetailPanel.current.panel.reveal(column);
-      TaskDetailPanel.current.postState();
+      void TaskDetailPanel.current.postState();
       return;
     }
     const panel = vscode.window.createWebviewPanel(
@@ -86,7 +94,7 @@ export class TaskDetailPanel {
     try {
       switch (msg.type) {
         case "ready":
-          this.postState();
+          await this.postState();
           break;
         case "save": {
           const impact = this.deps.preview(this.store.current!, {
@@ -96,7 +104,7 @@ export class TaskDetailPanel {
           });
           if (!impact.ok) {
             void vscode.window.showErrorMessage(impact.error ?? "Цикл зависимостей");
-            this.postState();
+            await this.postState();
             return;
           }
           this.store.updateTask(this.taskId, {
@@ -118,7 +126,7 @@ export class TaskDetailPanel {
           this.onChanged();
           this.panel.title = `Proman · ${msg.title}`;
           void vscode.window.showInformationMessage("Proman: задача сохранена");
-          this.postState();
+          await this.postState();
           break;
         }
         case "delete": {
@@ -130,20 +138,88 @@ export class TaskDetailPanel {
           break;
         }
         case "addChild": {
-          this.store.addTask(this.taskId, msg.title);
+          const child = this.store.addTask(this.taskId, msg.title);
           await this.store.save();
+          const { createIssueForTask } = await import("./githubSync");
+          await createIssueForTask(this.store, child.id);
           this.onChanged();
-          this.postState();
+          await this.postState();
           break;
         }
         case "runAgent":
           await this.handoff.runTask(this.taskId);
           this.onChanged();
-          this.postState();
+          await this.postState();
           break;
         case "copyPrompt":
           await this.handoff.copyPrompt(this.taskId);
           break;
+        case "addComment": {
+          const root = this.store.workspaceRoot;
+          if (!root) throw new Error("Нет workspace");
+          if (!this.store.hasCurrentUser()) {
+            void vscode.window.showWarningMessage(
+              "Proman: сначала укажите текущего пользователя (команда «Set Current User»)"
+            );
+            return;
+          }
+          const author = this.store.currentUser();
+          const comment = await addComment(root, this.taskId, author, msg.text);
+          if (!comment) throw new Error("Не удалось сохранить комментарий");
+          this.store.recordCommentHistory(this.taskId, author, comment.text);
+          await this.store.save();
+          this.onChanged();
+          await this.postState();
+          break;
+        }
+        case "assignToMe": {
+          if (!this.store.hasCurrentUser()) {
+            void vscode.window.showWarningMessage(
+              "Proman: сначала укажите текущего пользователя (команда «Set Current User»)"
+            );
+            return;
+          }
+          this.store.updateTask(this.taskId, { assignee: this.store.currentUser() });
+          await this.store.save();
+          this.onChanged();
+          await this.postState();
+          break;
+        }
+        case "pickAssignee": {
+          const known = this.store.listAssignees();
+          const picked = await vscode.window.showQuickPick(
+            [
+              ...(this.store.hasCurrentUser()
+                ? [{ label: `@${this.store.currentUser()}`, description: "я", value: this.store.currentUser() }]
+                : []),
+              ...known
+                .filter((a) => !this.store.hasCurrentUser() || a !== this.store.currentUser())
+                .map((a) => ({ label: `@${a}`, value: a })),
+              { label: "Ввести вручную…", value: "__custom__" },
+              { label: "Снять назначение", value: "__clear__" },
+            ],
+            { title: "Назначить задачу" }
+          );
+          if (!picked) return;
+          let assignee: string | undefined;
+          if (picked.value === "__clear__") {
+            assignee = undefined;
+          } else if (picked.value === "__custom__") {
+            const typed = await vscode.window.showInputBox({
+              prompt: "Assignee (без @)",
+              placeHolder: "alice",
+            });
+            if (typed === undefined) return;
+            assignee = typed.trim().replace(/^@+/, "") || undefined;
+          } else {
+            assignee = picked.value;
+          }
+          this.store.updateTask(this.taskId, { assignee });
+          await this.store.save();
+          this.onChanged();
+          await this.postState();
+          break;
+        }
       }
     } catch (e) {
       void vscode.window.showErrorMessage(
@@ -152,7 +228,20 @@ export class TaskDetailPanel {
     }
   }
 
-  private postState(): void {
+  private async loadSideData(): Promise<void> {
+    const root = this.store.workspaceRoot;
+    if (!root) {
+      this.comments = [];
+      this.history = [];
+      return;
+    }
+    this.comments = await loadComments(root, this.taskId);
+    const all = await loadHistory(root);
+    this.history = historyForTask(all, this.taskId, 15);
+  }
+
+  private async postState(): Promise<void> {
+    await this.loadSideData();
     const state = this.store.current;
     const task = state?.tasks[this.taskId];
     if (!task || !state) {
@@ -176,6 +265,9 @@ export class TaskDetailPanel {
       blocked,
       relations,
       progress: this.store.progress(task.id),
+      comments: this.comments,
+      history: this.history,
+      currentUser: getMetaCurrentUser(state.meta) ?? null,
     });
   }
 
@@ -195,6 +287,7 @@ export class TaskDetailPanel {
   }
   body { margin: 0; padding: 16px 20px 32px; max-width: 720px; }
   h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; }
   .sub { opacity: 0.7; margin-bottom: 16px; font-size: 12px; }
   label { display: block; margin: 12px 0 4px; opacity: 0.8; font-size: 12px; }
   input, textarea, select {
@@ -206,6 +299,7 @@ export class TaskDetailPanel {
     font: inherit;
   }
   textarea { min-height: 120px; resize: vertical; }
+  textarea#commentText { min-height: 56px; }
   select[multiple] { min-height: 110px; }
   .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .meta-row { margin-top: 0; }
@@ -223,6 +317,16 @@ export class TaskDetailPanel {
   .hint { margin-top: 8px; font-size: 12px; opacity: 0.75; line-height: 1.4; }
   ul { margin: 4px 0 0; padding-left: 18px; }
   .missing { opacity: 0.7; padding: 24px 0; }
+  .comments, .history { margin-top: 4px; }
+  .comment, .hist {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--vscode-panel-border, rgba(127,127,127,.25));
+    font-size: 12px; line-height: 1.45;
+  }
+  .comment .who, .hist .who { font-weight: 600; }
+  .comment .when, .hist .when { opacity: 0.6; margin-left: 6px; font-weight: 400; }
+  .comment .body { margin-top: 4px; white-space: pre-wrap; }
+  .empty { opacity: 0.6; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -235,18 +339,48 @@ export class TaskDetailPanel {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function fmtTime(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString();
+      } catch { return iso; }
+    }
+
+    function histLine(h) {
+      if (h.kind === 'status') {
+        return 'статус: ' + esc(h.from || '—') + ' → ' + esc(h.to || '—');
+      }
+      if (h.kind === 'assignee') {
+        return 'назначение: ' + esc(h.from ? '@'+h.from : '—') + ' → ' + esc(h.to ? '@'+h.to : '—');
+      }
+      return 'комментарий: ' + esc(h.message || '');
+    }
+
     function render(data) {
       if (!data || data.type === 'missing') {
         root.innerHTML = '<div class="missing">Задача не найдена. Выберите узел в дереве Proman.</div>';
         return;
       }
       const t = data.task;
+      const comments = data.comments || [];
+      const history = data.history || [];
+      const me = data.currentUser;
       const opts = data.others.map(o =>
         '<option value="'+esc(o.id)+'"'+(t.dependsOn.includes(o.id)?' selected':'')+'>'+esc(o.title)+' ('+o.status+')</option>'
       ).join('');
+      const commentHtml = comments.length
+        ? comments.map(c =>
+            '<div class="comment"><span class="who">@'+esc(c.author)+'</span><span class="when">'+esc(fmtTime(c.at))+'</span><div class="body">'+esc(c.text)+'</div></div>'
+          ).join('')
+        : '<div class="empty">Пока нет комментариев</div>';
+      const histHtml = history.length
+        ? history.slice().reverse().map(h =>
+            '<div class="hist"><span class="who">@'+esc(h.actor)+'</span><span class="when">'+esc(fmtTime(h.at))+'</span><div>'+histLine(h)+'</div></div>'
+          ).join('')
+        : '<div class="empty">История пуста</div>';
       root.innerHTML = \`
         <h1 id="heading">\${esc(t.title)}</h1>
-        <div class="sub">id: \${esc(t.id)} · source: \${esc(t.source)} · ветка: \${data.progress.done}/\${data.progress.total}</div>
+        <div class="sub">id: \${esc(t.id)} · source: \${esc(t.source)} · ветка: \${data.progress.done}/\${data.progress.total}\${me ? ' · вы: @'+esc(me) : ' · пользователь не задан'}</div>
         <label>Название</label>
         <input id="title" value="\${esc(t.title)}" />
         <label>Статус</label>
@@ -273,6 +407,10 @@ export class TaskDetailPanel {
             <input id="assignee" value="\${esc(t.assignee||'')}" placeholder="@alice" />
           </div>
         </div>
+        <div class="row" style="margin-top:8px">
+          <button class="secondary" id="assignMe">Назначить на меня</button>
+          <button class="secondary" id="pickAssignee">Выбрать assignee…</button>
+        </div>
         <label>Теги (через пробел)</label>
         <input id="tags" value="\${esc((t.tags||[]).map(function(x){return '#'+x;}).join(' '))}" placeholder="#backend #api" />
         <label>Описание</label>
@@ -289,6 +427,17 @@ export class TaskDetailPanel {
           <button class="secondary" id="copy">Копировать промпт</button>
           <button class="danger" id="del">Удалить</button>
         </div>
+
+        <h2>💬 Комментарии (\${comments.length})</h2>
+        <div class="comments">\${commentHtml}</div>
+        <label>Новый комментарий</label>
+        <textarea id="commentText" placeholder="Текст комментария…"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="addComment">Добавить комментарий</button>
+        </div>
+
+        <h2>История</h2>
+        <div class="history">\${histHtml}</div>
       \`;
       document.getElementById('save').onclick = () => {
         const depends = Array.from(document.getElementById('depends').selectedOptions).map(o => o.value);
@@ -316,6 +465,13 @@ export class TaskDetailPanel {
         const cascade = confirm('Удалить с подзадачами?\\nOK = каскад, Отмена = поднять детей');
         vscode.postMessage({ type: 'delete', mode: cascade ? 'cascade' : 'promote' });
       };
+      document.getElementById('addComment').onclick = () => {
+        const text = document.getElementById('commentText').value;
+        if (!text.trim()) return;
+        vscode.postMessage({ type: 'addComment', text });
+      };
+      document.getElementById('assignMe').onclick = () => vscode.postMessage({ type: 'assignToMe' });
+      document.getElementById('pickAssignee').onclick = () => vscode.postMessage({ type: 'pickAssignee' });
     }
 
     window.addEventListener('message', e => render(e.data));

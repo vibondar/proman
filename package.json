@@ -1,8 +1,8 @@
 {
   "name": "proman",
   "displayName": "Proman",
-  "description": "Project tree management for Cursor/VS Code — tasks, dependencies, Agent handoff",
-  "version": "0.3.10",
+  "description": "Дерево задач в .proman/: статусы, Agent/MCP, Git sync команды, GitHub Issues. Для разработчиков Cursor/VS Code.",
+  "version": "0.3.13",
   "publisher": "proman",
   "engines": {
     "vscode": "^1.85.0"
@@ -89,6 +89,53 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "proman.toggleMyTasks",
+        "title": "Proman: Мои задачи / Все задачи",
+        "icon": "$(account)"
+      },
+      {
+        "command": "proman.setCurrentUser",
+        "title": "Proman: Set Current User",
+        "icon": "$(person)"
+      },
+      {
+        "command": "proman.assignTask",
+        "title": "Proman: Assign Task",
+        "icon": "$(mention)"
+      },
+      {
+        "command": "proman.gitPull",
+        "title": "Proman: Git Pull",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "proman.gitPush",
+        "title": "Proman: Git Push",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "proman.enableGitSync",
+        "title": "Proman: Enable Git Sync"
+      },
+      {
+        "command": "proman.configureGitSync",
+        "title": "Proman: Configure Git Sync"
+      },
+      {
+        "command": "proman.enableGithubIssues",
+        "title": "Proman: Enable GitHub Issues",
+        "icon": "$(github)"
+      },
+      {
+        "command": "proman.configureGithubIssues",
+        "title": "Proman: Configure GitHub Issues"
+      },
+      {
+        "command": "proman.syncGithubIssues",
+        "title": "Proman: Sync Closed GitHub Issues",
+        "icon": "$(sync)"
+      },
+      {
         "command": "proman.copyAgentPrompt",
         "title": "Proman: Copy Agent Prompt"
       },
@@ -153,29 +200,44 @@
           "group": "navigation@0"
         },
         {
-          "command": "proman.clearTreeSearch",
-          "when": "view == proman.tree && (proman.treeFiltered || proman.pathHighlighted)",
+          "command": "proman.toggleMyTasks",
+          "when": "view == proman.tree",
           "group": "navigation@1"
         },
         {
-          "command": "proman.driveTree",
-          "when": "view == proman.tree",
+          "command": "proman.clearTreeSearch",
+          "when": "view == proman.tree && (proman.treeFiltered || proman.pathHighlighted || proman.myTasksOnly)",
           "group": "navigation@2"
         },
         {
-          "command": "proman.addRootTask",
+          "command": "proman.gitPull",
           "when": "view == proman.tree",
           "group": "navigation@3"
         },
         {
-          "command": "proman.importPlanningDocs",
+          "command": "proman.gitPush",
           "when": "view == proman.tree",
           "group": "navigation@4"
         },
         {
-          "command": "proman.reloadTree",
+          "command": "proman.driveTree",
           "when": "view == proman.tree",
           "group": "navigation@5"
+        },
+        {
+          "command": "proman.addRootTask",
+          "when": "view == proman.tree",
+          "group": "navigation@6"
+        },
+        {
+          "command": "proman.importPlanningDocs",
+          "when": "view == proman.tree",
+          "group": "navigation@7"
+        },
+        {
+          "command": "proman.reloadTree",
+          "when": "view == proman.tree",
+          "group": "navigation@8"
         }
       ],
       "view/item/context": [
@@ -207,6 +269,16 @@
         {
           "command": "proman.openTaskDetails",
           "when": "view == proman.tree && viewItem == promanTask",
+          "group": "1_edit"
+        },
+        {
+          "command": "proman.assignTask",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "1_edit"
+        },
+        {
+          "command": "proman.setCurrentUser",
+          "when": "view == proman.tree",
           "group": "1_edit"
         },
         {
@@ -266,7 +338,8 @@
     "vscode:prepublish": "npm run build",
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
-    "package": "vsce package --no-dependencies",
+    "package": "vsce package --no-dependencies --baseContentUrl https://example.com/proman --baseImagesUrl https://example.com/proman",
+    "install:cursor": "npm run package && cursor --install-extension \"$(ls -t *.vsix | head -1)\" --force",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

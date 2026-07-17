@@ -65,11 +65,45 @@ export interface DependencyEdge {
   kind: "dependsOn" | "blocks" | "related";
 }
 
+export interface TeamMember {
+  username: string;
+  name?: string;
+}
+
+export interface TeamConfig {
+  members: TeamMember[];
+  currentUser?: string;
+}
+
+export interface SyncConfig {
+  type: "git";
+  autoCommit?: boolean;
+  autoPush?: boolean;
+}
+
+/** GitHub Issues bridge (этап 2). Связь: строка «GitHub: #N» в description. */
+export interface GithubIssuesConfig {
+  enabled: boolean;
+  owner: string;
+  repo: string;
+  /** Create Issue when a task is added (default true). */
+  createOnAdd?: boolean;
+  /** Set task status to done when linked Issue is closed (default true). */
+  closeToDone?: boolean;
+}
+
 export interface ProjectMeta {
   name: string;
   planningDir?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * @deprecated Prefer team.currentUser — kept for backward compatibility.
+   */
+  currentUser?: string;
+  team?: TeamConfig;
+  sync?: SyncConfig;
+  github?: GithubIssuesConfig;
 }
 
 export interface ProjectState {

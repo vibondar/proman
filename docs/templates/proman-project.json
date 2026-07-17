@@ -1,0 +1,24 @@
+{
+  "name": "Мой проект",
+  "team": {
+    "members": [
+      { "username": "alice", "name": "Алиса" },
+      { "username": "bob", "name": "Боб" }
+    ],
+    "currentUser": "alice"
+  },
+  "sync": {
+    "type": "git",
+    "autoCommit": true,
+    "autoPush": false
+  },
+  "github": {
+    "enabled": true,
+    "owner": "acme",
+    "repo": "my-app",
+    "createOnAdd": true,
+    "closeToDone": true
+  },
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

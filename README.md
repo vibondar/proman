@@ -1,68 +1,173 @@
 # Proman
 
-Расширение Cursor / VS Code для управления ходом разработки через **дерево проекта**.
+Расширение **Cursor / VS Code** для управления разработкой через дерево задач в `.proman/`.
 
-## Возможности
+Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
 
-- Панель **Proman** в Activity Bar: дерево задач, статусы, прогресс
-- Вставка / удаление задач с **превью влияния** на зависимые узлы
-- Импорт MD (roadmap, plan, чеклисты) → дерево в `.proman/`
-- При открытии проекта — поиск директории планирования
-- **Выполнить в Agent** — промпт в буфер + открытие Cursor Agent (без отдельного API key)
-- MCP-инструменты `proman_*` (stdio MCP в Cursor) для обновления статусов из Agent
+**Версия:** 0.3.13
 
-## Запуск (разработка)
+---
 
-```bash
-npm install
-npm run build
-```
+## Для кого
 
-Затем **F5** (конфигурация «Run Proman Extension») — откроется Extension Development Host.
+Разработчики и небольшие команды, которые хотят:
 
-В боковой панели найдите иконку Proman.
+- вести план рядом с кодом (файлы в репозитории);
+- отдавать задачи Cursor Agent с контекстом и статусами;
+- синхронизироваться через Git / GitHub Issues без тяжёлого PM-стека.
 
-## Данные проекта
+---
 
-В корне workspace создаётся:
+## Быстрый старт
+
+1. Установите VSIX (`npm run install:cursor` или Install from VSIX).
+2. Откройте папку проекта → Activity Bar → **Proman**.
+3. Импортируйте MD или добавьте корневую задачу.
+4. (Опционально) `Proman: Set Current User` — кто вы в команде.
+5. (Опционально) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+
+Данные проекта:
 
 ```
 .proman/
-  project.json
-  tree.json
-  edges.json
+  project.json      # meta, team, sync, github
+  tree.json         # задачи
+  edges.json        # зависимости
+  history.json      # локальная история изменений
+  comments/         # комментарии по task id
   prompts/
   imports/
+  proposals/
 ```
 
-## Шаблон planning-MD
+В **командном** репозитории коммитьте `.proman/` (не добавляйте его в `.gitignore`).
 
-Эталон для генерации документов задач (иерархия + описания + зависимости):
+---
 
-[`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md)
+## Возможности
 
-В начале файла: frontmatter `type: plan` — Proman находит такие MD сам, id узлов: `plan_1`, `plan_2`, …  
-Пример запроса агенту: *«сгенерируй roadmap по шаблону `docs/templates/proman-tasks.md` для …»*.  
-Импорт: **Proman: Import Planning Docs**.
+### Дерево и статусы
 
-## Drive Mode (агент ведёт дерево)
+- Панель дерева: статусы `todo` / `new` / `in_progress` / `done` / `needs_rework` / `error` / `blocked`
+- Цвета иконок, Σ SP на эпиках, assignee в строке
+- Detail panel: описание, оценки, теги, зависимости, assign, комментарии, история
+- Поиск по дереву + фильтр пути
+- **👤 Мои задачи** — фильтр по `team.currentUser`
 
-1. В панели Proman нажмите **▶ Agent Drive Tree** (или Command Palette → `Proman: Agent Drive Tree`)
-2. Промпт копируется → вставьте в Cursor Agent и отправьте
-3. Agent вызывает MCP `proman_*`: берёт следующую задачу, пишет код, ставит статусы
-4. Изменение **структуры** дерева — только после вашего **Approve** в диалоге
-5. `Proman: Stop Drive Mode` — остановить сессию
+### Планирование из Markdown
 
-При активации расширения в проект пишется `.cursor/mcp.json` с сервером `proman` (tools для Agent).
+- Импорт roadmap / plan / чеклистов → дерево
+- Frontmatter `type: plan` → id `plan_1`, `plan_2`, …
+- Шаблон: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md)
+- Пример meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
 
+### Agent / Drive Mode
 
-## Команды
+- **Run Task in Agent** — промпт в буфер + Agent
+- **Drive Mode** — агент идёт по очереди через MCP `proman_*`
+- Структура дерева меняется только после вашего **Approve**
+- При активации пишется `.cursor/mcp.json` (сервер `proman`)
+
+### Командная работа (локально)
+
+- История в `.proman/history.json` (кто сменил статус / назначил / когда)
+- Комментарии в `.proman/comments/<taskId>.json`
+- Уведомление при назначении задачи на вас
+
+### Этап 1 — Git как бэкенд
+
+В `project.json`:
+
+```json
+"team": {
+  "members": [
+    { "username": "alice", "name": "Алиса" },
+    { "username": "bob", "name": "Боб" }
+  ],
+  "currentUser": "alice"
+},
+"sync": {
+  "type": "git",
+  "autoCommit": true,
+  "autoPush": false
+}
+```
+
+- Кнопки **Pull** / **Push** в тулбаре
+- Авто-коммит `.proman/` при смене статуса (`proman: @alice todo → done: …`)
+- Команды: `Enable Git Sync`, `Configure Git Sync`
+
+### Этап 2 — GitHub Issues
+
+```json
+"github": {
+  "enabled": true,
+  "owner": "acme",
+  "repo": "my-app",
+  "createOnAdd": true,
+  "closeToDone": true
+}
+```
+
+- Создание задачи → Issue; в описании связь: `GitHub: #42`
+- Закрытие Issue → задача `done`
+- Auth: сессия GitHub в Cursor (`repo`)
+- Команды: `Enable GitHub Issues`, `Sync Closed GitHub Issues`
+- Фоновый sync при старте / каждые 5 мин / после Pull
+
+---
+
+## Команды (основные)
 
 | Команда | Действие |
 |---------|----------|
 | Proman: Open | Фокус на панели |
-| Proman: Import Planning Docs | Импорт MD / папки |
-| Proman: Set Planning Directory | Папка для watcher |
-| Proman: Run Task in Agent | Handoff выбранной задачи |
-| Proman: Enrich Tree via Agent | Уточнить дерево из MD |
-| Proman: Recalculate Dependencies | Пересчёт blocked |
+| Proman: Import Planning Docs | Импорт MD |
+| Proman: Set Current User | `team.currentUser` |
+| Proman: Мои задачи / Все | Фильтр assignee |
+| Proman: Assign Task | Назначение |
+| Proman: Agent Drive Tree | Drive Mode |
+| Proman: Git Pull / Push | Синхронизация `.proman/` |
+| Proman: Enable Git Sync | Git backend |
+| Proman: Enable GitHub Issues | Мост Issues |
+| Proman: Sync Closed GitHub Issues | closed → done |
+
+---
+
+## Разработка расширения
+
+```bash
+npm install
+npm run build          # esbuild → dist/extension.js
+npm test               # vitest
+npm run test:coverage
+npm run package        # → proman-x.y.z.vsix
+npm run install:cursor # package + install в Cursor
+```
+
+- **F5** — Extension Development Host (`Run Proman Extension`)
+- Entry: `src/extension.ts`
+- Core (без UI): `src/core/*`
+- MCP server: `mcp/server.mjs` → бандл `mcp/server.cjs`
+
+### Тесты
+
+Unit-тесты на pure core: pathSafety, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
+
+```bash
+npm test
+```
+
+---
+
+## Требования
+
+- Cursor или VS Code `^1.85.0`
+- Для Git sync: `git` в PATH, workspace = git repo
+- Для GitHub Issues: вход в GitHub в IDE, права на репозиторий
+
+---
+
+## Лицензия / поставка
+
+Локальный VSIX. Поле `repository` в манифесте можно добавить при публикации на Marketplace.

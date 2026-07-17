@@ -11,8 +11,26 @@ import {
 import { enrichAllTasks, enrichTaskFromDescription, upsertMetaInDescription } from "./taskMeta";
 import { resolvePlanningDir } from "./pathSafety";
 import { wsMkdir, wsReadText, wsWriteText } from "./workspaceIo";
+import { appendHistory, HistoryEntry, loadHistory, makeHistoryEntry } from "./history";
+import { actorsEqual, displayActor, normalizeActor } from "./actor";
+import {
+  formatStatusCommitMessage,
+  getMetaCurrentUser,
+  isGitSyncEnabled,
+  listTeamUsernames,
+  normalizeProjectMeta,
+  setMetaCurrentUser,
+} from "./projectMeta";
+import { gitCommitProman, isGitRepo } from "./gitSync";
 
 const PROMAN_DIR = ".proman";
+
+export interface AssignmentEvent {
+  taskId: string;
+  title: string;
+  assignee: string;
+  actor: string;
+}
 
 function emptyState(name: string): ProjectState {
   const now = new Date().toISOString();
@@ -33,11 +51,48 @@ export class ProjectStore {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<ProjectState | null>();
   readonly onDidChange = this.onDidChangeEmitter.event;
   private log: (msg: string) => void = () => undefined;
+  private pendingHistory: HistoryEntry[] = [];
+  private onAssigned: ((e: AssignmentEvent) => void) | undefined;
+  /** Last known assignees — used to detect assignments after disk reload. */
+  private prevAssignees = new Map<string, string | undefined>();
+  /** Queue auto git-commit after save when status changed. */
+  private pendingStatusCommit: { taskId: string; title: string; from?: string; to: string } | null =
+    null;
+  private gitBusy = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   setLogger(fn: (msg: string) => void): void {
     this.log = fn;
+  }
+
+  setAssignmentListener(fn: (e: AssignmentEvent) => void): void {
+    this.onAssigned = fn;
+  }
+
+  private snapshotAssignees(): void {
+    this.prevAssignees.clear();
+    if (!this.state) return;
+    for (const t of Object.values(this.state.tasks)) {
+      this.prevAssignees.set(t.id, t.assignee);
+    }
+  }
+
+  private notifyIfAssignedToMe(
+    task: TaskNode,
+    prevAssignee: string | undefined,
+    actor: string
+  ): void {
+    const me = getMetaCurrentUser(this.state?.meta);
+    if (!me || !task.assignee) return;
+    if (!actorsEqual(task.assignee, me)) return;
+    if (actorsEqual(prevAssignee, me)) return;
+    this.onAssigned?.({
+      taskId: task.id,
+      title: task.title,
+      assignee: displayActor(task.assignee),
+      actor: displayActor(actor),
+    });
   }
 
   /** Always resolve live — workspace may be unavailable at activate() time. */
@@ -57,6 +112,34 @@ export class ProjectStore {
 
   get current(): ProjectState | null {
     return this.state;
+  }
+
+  currentUser(): string {
+    return displayActor(getMetaCurrentUser(this.state?.meta));
+  }
+
+  hasCurrentUser(): boolean {
+    return Boolean(normalizeActor(getMetaCurrentUser(this.state?.meta)));
+  }
+
+  setCurrentUser(name: string): void {
+    if (!this.state) throw new Error("Проект не инициализирован");
+    setMetaCurrentUser(this.state.meta, name);
+  }
+
+  private actorName(): string {
+    return this.hasCurrentUser() ? this.currentUser() : "unknown";
+  }
+
+  private queueHistory(
+    partial: Omit<HistoryEntry, "id" | "at" | "actor"> & { actor?: string }
+  ): void {
+    this.pendingHistory.push(
+      makeHistoryEntry({
+        ...partial,
+        actor: partial.actor ?? this.actorName(),
+      })
+    );
   }
 
   async waitForWorkspace(timeoutMs = 8000): Promise<vscode.WorkspaceFolder | undefined> {
@@ -95,7 +178,7 @@ export class ProjectStore {
         this.onDidChangeEmitter.fire(null);
         return null;
       }
-      const meta = JSON.parse(metaText) as ProjectMeta;
+      const meta = normalizeProjectMeta(JSON.parse(metaText) as ProjectMeta);
       const tree = JSON.parse(treeText) as {
         roots: string[];
         tasks: Record<string, TaskNode>;
@@ -113,6 +196,30 @@ export class ProjectStore {
         tasks: enrichAllTasks(tree.tasks ?? {}),
         edges,
       };
+      const me = getMetaCurrentUser(this.state.meta);
+      if (me && this.prevAssignees.size > 0) {
+        const hist = await loadHistory(root);
+        for (const t of Object.values(this.state.tasks)) {
+          const prev = this.prevAssignees.get(t.id);
+          if (actorsEqual(t.assignee, me) && !actorsEqual(prev, me)) {
+            const last = [...hist]
+              .reverse()
+              .find(
+                (e) =>
+                  e.taskId === t.id &&
+                  e.kind === "assignee" &&
+                  actorsEqual(e.to, me)
+              );
+            this.onAssigned?.({
+              taskId: t.id,
+              title: t.title,
+              assignee: displayActor(t.assignee),
+              actor: displayActor(last?.actor),
+            });
+          }
+        }
+      }
+      this.snapshotAssignees();
       this.log(
         `load: ok roots=${this.state.roots.length} tasks=${Object.keys(this.state.tasks).length}`
       );
@@ -148,9 +255,11 @@ export class ProjectStore {
       return;
     }
     this.state.meta.updatedAt = new Date().toISOString();
+    this.state.meta = normalizeProjectMeta(this.state.meta);
     const root = folder.uri.fsPath;
     await wsMkdir(root, PROMAN_DIR, "prompts");
     await wsMkdir(root, PROMAN_DIR, "imports");
+    await wsMkdir(root, PROMAN_DIR, "comments");
     const okMeta = await wsWriteText(
       root,
       [PROMAN_DIR, "project.json"],
@@ -169,10 +278,68 @@ export class ProjectStore {
     if (!okMeta || !okTree || !okEdges) {
       throw new Error("Не удалось сохранить .proman/ (path outside workspace?)");
     }
+    if (this.pendingHistory.length) {
+      const batch = this.pendingHistory.splice(0, this.pendingHistory.length);
+      try {
+        await appendHistory(root, batch);
+      } catch (e) {
+        this.log(`history: ${e instanceof Error ? e.message : String(e)}`);
+        this.pendingHistory.unshift(...batch);
+      }
+    }
     this.log(
       `save: ok roots=${this.state.roots.length} tasks=${Object.keys(this.state.tasks).length}`
     );
+    this.snapshotAssignees();
+    const statusCommit = this.pendingStatusCommit;
+    this.pendingStatusCommit = null;
     this.onDidChangeEmitter.fire(this.state);
+
+    if (statusCommit) {
+      void this.maybeAutoCommitStatus(statusCommit);
+    }
+  }
+
+  private async maybeAutoCommitStatus(info: {
+    taskId: string;
+    title: string;
+    from?: string;
+    to: string;
+  }): Promise<void> {
+    const root = this.workspaceRoot;
+    const meta = this.state?.meta;
+    if (!root || !meta || !isGitSyncEnabled(meta) || !meta.sync?.autoCommit) return;
+    if (this.gitBusy) return;
+    if (!(await isGitRepo(root))) {
+      this.log("git sync: not a git repo — skip auto-commit");
+      return;
+    }
+    this.gitBusy = true;
+    try {
+      const message = formatStatusCommitMessage(
+        this.actorName(),
+        info.title,
+        info.from,
+        info.to
+      );
+      const result = await gitCommitProman(root, message, {
+        push: Boolean(meta.sync.autoPush),
+      });
+      if (!result.ok) {
+        this.log(`git auto-commit failed: ${result.error ?? result.stderr}`);
+        void vscode.window.showWarningMessage(
+          `Proman git: авто-коммит не удался — ${result.error ?? result.stderr}`
+        );
+        return;
+      }
+      if (result.committed) {
+        this.log(
+          `git auto-commit: ${message}${result.pushed ? " (+ push)" : ""}`
+        );
+      }
+    } finally {
+      this.gitBusy = false;
+    }
   }
 
   progress(rootId?: string): TreeProgress {
@@ -200,13 +367,16 @@ export class ProjectStore {
       id: newId(),
       title: title.trim() || "Новая задача",
       description: opts?.description ?? "",
-      // Tasks added after the tree exists are marked "new" (blue)
       status: opts?.status ?? (hasExisting ? "new" : "todo"),
       children: [],
       dependsOn: opts?.dependsOn ?? [],
       source: opts?.source ?? "manual",
       impactHint: opts?.impactHint,
+      assignee: opts?.assignee,
     };
+    if (task.assignee) {
+      task.description = upsertMetaInDescription(task.description, { assignee: task.assignee });
+    }
     this.state.tasks[task.id] = task;
     if (parentId && this.state.tasks[parentId]) {
       this.state.tasks[parentId].children.push(task.id);
@@ -240,6 +410,10 @@ export class ProjectStore {
     if (!this.state) throw new Error("Проект не инициализирован");
     const task = this.state.tasks[taskId];
     if (!task) throw new Error(`Задача ${taskId} не найдена`);
+
+    const prevStatus = task.status;
+    const prevAssignee = task.assignee;
+
     Object.assign(task, patch);
     if ("estimateSp" in patch && (patch.estimateSp === undefined || patch.estimateSp === null)) {
       delete task.estimateSp;
@@ -280,6 +454,35 @@ export class ProjectStore {
       });
     }
     if (patch.dependsOn) this.syncEdgesFromDepends();
+
+    if ("status" in patch && patch.status && patch.status !== prevStatus) {
+      this.queueHistory({
+        taskId,
+        kind: "status",
+        from: prevStatus,
+        to: patch.status,
+      });
+      this.pendingStatusCommit = {
+        taskId,
+        title: task.title,
+        from: prevStatus,
+        to: patch.status,
+      };
+    }
+
+    const nextAssignee = task.assignee;
+    if (!actorsEqual(prevAssignee, nextAssignee)) {
+      const actor = this.actorName();
+      this.queueHistory({
+        taskId,
+        kind: "assignee",
+        from: prevAssignee,
+        to: nextAssignee,
+        actor,
+      });
+      this.notifyIfAssignedToMe(task, prevAssignee, actor);
+    }
+
     return task;
   }
 
@@ -318,7 +521,6 @@ export class ProjectStore {
     } else if (!parentId && mode === "cascade") {
       this.state.roots = this.state.roots.filter((id) => id !== taskId);
     } else if (mode === "promote") {
-      // children already spliced in; remove task id from parent/roots if still present as sole ref
       if (parentId && this.state.tasks[parentId]) {
         this.state.tasks[parentId].children = this.state.tasks[parentId].children.filter(
           (id) => id !== taskId
@@ -328,7 +530,6 @@ export class ProjectStore {
       }
     }
 
-    // Clean dependsOn references
     for (const t of Object.values(this.state.tasks)) {
       t.dependsOn = t.dependsOn.filter((id) => id !== taskId && this.state!.tasks[id]);
       t.children = t.children.filter((id) => this.state!.tasks[id]);
@@ -395,7 +596,6 @@ export class ProjectStore {
     if (!resolved) {
       throw new Error("planningDir должен быть внутри workspace");
     }
-    // Store as relative path when possible
     const rel = path.relative(root, resolved);
     this.state.meta.planningDir = rel || ".";
   }
@@ -444,11 +644,9 @@ export class ProjectStore {
     return edges;
   }
 
-  /** Apply blocked status when unmet dependencies exist */
   applyBlockedStatuses(): void {
     if (!this.state) return;
     for (const t of Object.values(this.state.tasks)) {
-      // Don't auto-touch finished / rework / error
       if (t.status === "done" || t.status === "needs_rework" || t.status === "error") {
         continue;
       }
@@ -469,7 +667,6 @@ export class ProjectStore {
     for (const node of nodes) {
       const exists = Boolean(this.state.tasks[node.id]);
       let status = node.status ?? (exists ? this.state.tasks[node.id].status : "new");
-      // Brand-new nodes default to "new" (blue) unless explicitly set to something else
       if (!exists && (!node.status || node.status === "todo")) {
         status = "new";
       }
@@ -497,5 +694,26 @@ export class ProjectStore {
   setStatus(taskId: string, status: TaskStatus): void {
     this.updateTask(taskId, { status });
     this.applyBlockedStatuses();
+  }
+
+  listAssignees(): string[] {
+    if (!this.state) return [];
+    const set = new Set<string>();
+    for (const t of Object.values(this.state.tasks)) {
+      const a = displayActor(t.assignee);
+      if (a !== "unknown") set.add(a);
+    }
+    for (const u of listTeamUsernames(this.state.meta)) set.add(u);
+    if (this.hasCurrentUser()) set.add(this.currentUser());
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }
+
+  recordCommentHistory(taskId: string, author: string, preview: string): void {
+    this.queueHistory({
+      taskId,
+      kind: "comment",
+      actor: author,
+      message: preview.slice(0, 120),
+    });
   }
 }

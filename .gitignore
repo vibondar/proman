@@ -3,5 +3,7 @@ dist/
 coverage/
 *.vsix
 .DS_Store
+# Local scratch while developing the extension.
+# In product/team repos: commit .proman/ (do not ignore it) for Git sync.
 .proman/
 .cursor/
