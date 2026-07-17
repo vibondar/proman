@@ -1,0 +1,17 @@
+.vscode/**
+.vscode-test/**
+src/**
+node_modules/**
+scripts/**
+docs/**
+.proman/**
+.cursor/**
+mcp/server.mjs
+**/*.ts
+**/*.map
+**/*.vsix
+.esbuild.config.mjs
+esbuild.config.mjs
+tsconfig.json
+.gitignore
+.DS_Store

@@ -1,0 +1,282 @@
+{
+  "name": "proman",
+  "displayName": "Proman",
+  "description": "Project tree management for Cursor/VS Code — tasks, dependencies, Agent handoff",
+  "version": "0.3.10",
+  "publisher": "proman",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:proman.tree"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "proman",
+          "title": "Proman",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "proman": [
+        {
+          "id": "proman.tree",
+          "name": "Project Tree"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "proman.tree",
+        "contents": "Нет задач в дереве.\n[Импорт MD](command:proman.importPlanningDocs)\n[Добавить задачу](command:proman.addRootTask)\n[Agent ведёт дерево](command:proman.driveTree)\n\nКлик — детали. ПКМ — подзадача / удалить / одна задача в Agent.\nDrive Mode: агент сам идёт по очереди и пишет статусы; структура — только после вашего Approve."
+      }
+    ],
+    "commands": [
+      {
+        "command": "proman.open",
+        "title": "Proman: Open",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "proman.importPlanningDocs",
+        "title": "Proman: Import Planning Docs",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "proman.setPlanningDirectory",
+        "title": "Proman: Set Planning Directory"
+      },
+      {
+        "command": "proman.runTaskInAgent",
+        "title": "Proman: Run Task in Agent",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "proman.driveTree",
+        "title": "Proman: Agent Drive Tree",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "proman.stopDrive",
+        "title": "Proman: Stop Drive Mode",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "proman.recalculateDependencies",
+        "title": "Proman: Recalculate Dependencies"
+      },
+      {
+        "command": "proman.reloadTree",
+        "title": "Proman: Reload Tree from Disk",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "proman.searchTree",
+        "title": "Proman: Search Tree",
+        "icon": "$(search)"
+      },
+      {
+        "command": "proman.clearTreeSearch",
+        "title": "Proman: Clear Tree Filter",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "proman.copyAgentPrompt",
+        "title": "Proman: Copy Agent Prompt"
+      },
+      {
+        "command": "proman.enrichTreeFromMd",
+        "title": "Proman: Enrich Tree via Agent"
+      },
+      {
+        "command": "proman.addRootTask",
+        "title": "Proman: Add Root Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "proman.addChildTask",
+        "title": "Proman: Add Child Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "proman.deleteTask",
+        "title": "Proman: Delete Task",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "proman.openTaskDetails",
+        "title": "Proman: Open Task Details",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "proman.setStatusTodo",
+        "title": "Proman: Status → todo"
+      },
+      {
+        "command": "proman.setStatusNew",
+        "title": "Proman: Status → new (синяя)"
+      },
+      {
+        "command": "proman.setStatusInProgress",
+        "title": "Proman: Status → in_progress"
+      },
+      {
+        "command": "proman.setStatusDone",
+        "title": "Proman: Status → done (зелёная)"
+      },
+      {
+        "command": "proman.setStatusNeedsRework",
+        "title": "Proman: Status → needs_rework (жёлтая)"
+      },
+      {
+        "command": "proman.setStatusError",
+        "title": "Proman: Status → error (красная)"
+      },
+      {
+        "command": "proman.selectTask",
+        "title": "Proman: Select Task"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "proman.searchTree",
+          "when": "view == proman.tree",
+          "group": "navigation@0"
+        },
+        {
+          "command": "proman.clearTreeSearch",
+          "when": "view == proman.tree && (proman.treeFiltered || proman.pathHighlighted)",
+          "group": "navigation@1"
+        },
+        {
+          "command": "proman.driveTree",
+          "when": "view == proman.tree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "proman.addRootTask",
+          "when": "view == proman.tree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "proman.importPlanningDocs",
+          "when": "view == proman.tree",
+          "group": "navigation@4"
+        },
+        {
+          "command": "proman.reloadTree",
+          "when": "view == proman.tree",
+          "group": "navigation@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "proman.openTaskDetails",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "inline@1"
+        },
+        {
+          "command": "proman.addChildTask",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "inline@2"
+        },
+        {
+          "command": "proman.deleteTask",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "inline@3"
+        },
+        {
+          "command": "proman.runTaskInAgent",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "inline@4"
+        },
+        {
+          "command": "proman.addChildTask",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "1_edit"
+        },
+        {
+          "command": "proman.openTaskDetails",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "1_edit"
+        },
+        {
+          "command": "proman.setStatusInProgress",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@1"
+        },
+        {
+          "command": "proman.setStatusDone",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@2"
+        },
+        {
+          "command": "proman.setStatusNeedsRework",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@3"
+        },
+        {
+          "command": "proman.setStatusError",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@4"
+        },
+        {
+          "command": "proman.setStatusNew",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@5"
+        },
+        {
+          "command": "proman.setStatusTodo",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "2_status@6"
+        },
+        {
+          "command": "proman.copyAgentPrompt",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "3_agent"
+        },
+        {
+          "command": "proman.deleteTask",
+          "when": "view == proman.tree && viewItem == promanTask",
+          "group": "9_danger"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Proman",
+      "properties": {
+        "proman.autoDiscoverOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask to import planning docs when opening a workspace without .proman/"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  }
+}

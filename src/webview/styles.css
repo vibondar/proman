@@ -1,0 +1,247 @@
+:root {
+  --bg: var(--vscode-sideBar-background);
+  --fg: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --border: var(--vscode-panel-border, rgba(127, 127, 127, 0.3));
+  --accent: var(--vscode-button-background);
+  --accent-fg: var(--vscode-button-foreground);
+  --input-bg: var(--vscode-input-background);
+  --input-fg: var(--vscode-input-foreground);
+  --hover: var(--vscode-list-hoverBackground);
+  --focus: var(--vscode-list-activeSelectionBackground);
+  --done: #3d9a5f;
+  --progress: #c9a227;
+  --blocked: #c45c5c;
+  --todo: var(--muted);
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+  color: var(--fg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 200px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar button,
+.row-actions button,
+.impact button {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.toolbar button.secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.toolbar button:hover,
+.row-actions button:hover {
+  filter: brightness(1.1);
+}
+
+.progress-bar {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.progress-bar .meta {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--done);
+  transition: width 0.2s ease;
+}
+
+.tree {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+
+.empty {
+  padding: 16px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.node {
+  user-select: none;
+}
+
+.node-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.node-row:hover {
+  background: var(--hover);
+}
+
+.node-row.selected {
+  background: var(--focus);
+  border-left-color: var(--accent);
+}
+
+.twisty {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.todo { background: var(--todo); }
+.status-dot.in_progress { background: var(--progress); }
+.status-dot.done { background: var(--done); }
+.status-dot.blocked { background: var(--blocked); }
+
+.title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title.done {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.badge {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.children {
+  margin-left: 12px;
+  border-left: 1px dashed var(--border);
+}
+
+.detail {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  max-height: 40%;
+  overflow: auto;
+}
+
+.detail h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.detail label {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.detail input,
+.detail select,
+.detail textarea {
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.detail textarea {
+  min-height: 48px;
+  resize: vertical;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.row-actions button.danger {
+  background: var(--blocked);
+}
+
+.impact {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  background: color-mix(in srgb, var(--progress) 12%, transparent);
+}
+
+.impact h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.impact ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.impact li {
+  margin: 2px 0;
+}
+
+.impact.error {
+  background: color-mix(in srgb, var(--blocked) 15%, transparent);
+}
+
+.depends-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
