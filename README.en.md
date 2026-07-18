@@ -15,8 +15,9 @@ Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHu
 Developers and small teams who want to:
 
 - keep the plan next to the code (files in the repo);
-- **move a development plan** between projects/repos **with current progress preserved** (export to MD → import);
-- hand tasks to Cursor Agent with context and statuses;
+- generate a development plan in Cursor **from a single template** and import it into the tree;
+- **move a plan** between projects **with progress preserved** (export MD → import);
+- hand tasks to Cursor Agent with context, statuses, and touched-file lists;
 - sync via Git / GitHub Issues without a heavy PM stack.
 
 ---
@@ -30,9 +31,40 @@ Developers and small teams who want to:
 5. (Optional) `Proman: Set Current User` — who you are on the team.
 6. (Optional) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
 
-### Planning tasks with Cursor
+### Plan template in Cursor Rules
 
-For a task list that Proman imports cleanly, point Cursor at the template [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) (copy it into the project or give the path). Ask Cursor to draft the roadmap/checklist **using that template**, then run **Proman: Import Planning Docs**.
+So Cursor **reliably** drafts plans in a format Proman can import, wire [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) as a project rule.
+
+1. Copy the template into your repo if needed, e.g. `docs/templates/proman-tasks.md`.
+2. Create a Cursor rule:
+   - Cursor Settings → **Rules** → Project Rules → **Add Rule**, or
+   - file `.cursor/rules/proman-plan.mdc` at the project root.
+3. Example rule body:
+
+```markdown
+---
+description: Proman development plans — follow proman-tasks.md only
+alwaysApply: true
+---
+
+# Development plan (Proman)
+
+When the user asks for a roadmap, task plan, backlog, or planning MD for this project:
+
+1. Read and follow `docs/templates/proman-tasks.md` (frontmatter `type: plan`, headings, `- [ ]` checkboxes, descriptions, Depends on, Estimate / Assignee / Tags / Code).
+2. Write one `.md` file (e.g. `docs/plans/<name>.md`) in that template format.
+3. Do not invent another task-list format — Proman parses this MD.
+4. After generation, remind them to import via **Proman: Import Planning Docs**.
+```
+
+4. Reload Window (or start a new chat), then ask e.g. *“Draft a development plan using the Proman template”*.
+5. Import the file: **Proman: Import Planning Docs**.
+
+You can also paste the template path once in chat; a rule removes repetition and free-form output.
+
+### One-off planning with Cursor
+
+In chat, point at [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md), ask for a roadmap **using that template**, then **Proman: Import Planning Docs**.
 
 Project data:
 
@@ -50,7 +82,7 @@ Project data:
   proposals/
 ```
 
-Each imported file becomes a **section** in the Proman panel. Statuses live in `trees/<slug>.json` across reopen; re-import/sync **merges** MD structure while preserving `status` / assignee.
+Each imported file becomes a **section** in the Proman panel. Statuses live in `trees/<slug>.json` across reopen; re-import/sync **merges** MD structure while preserving `status` / assignee / `changedFiles`. UI reads `trees/*`; flat `tree.json` stays in sync (including after MCP writes).
 
 In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 
@@ -76,6 +108,7 @@ Removing a section: **Delete Task Tree** — warns that progress in that tree **
 - Multiple trees (sections) in one project — one per imported plan
 - Icon colors, Σ SP on epics, assignee in the row
 - Detail panel: description, estimates, tags, dependencies, assign, comments, history
+- On **done** tasks: **created/modified files** list (click → open in IDE); own + done subtasks; source — MCP `files` on `done`, else fallback to `Code:` / `Tests:` from the description
 - Tree search + path highlight
 - **My tasks** — filter by `team.currentUser`
 - **Export section to MD** with current progress; **delete tree** with confirmation
@@ -84,16 +117,18 @@ Removing a section: **Delete Task Tree** — warns that progress in that tree **
 
 - Import roadmap / plan / checklists → tree
 - Frontmatter `type: plan` → ids `plan_1`, `plan_2`, …
-- Template for generating the task list: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — recommend this to Cursor as the format sample
+- Template: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — attach via **Cursor Rules** (see above)
 - Sample meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
 - Round-trip: export → MD → import **preserves progress** (checkboxes + `Status:` lines)
 
 ### Agent / Drive Mode
 
-- **Run Task in Agent** — prompt to clipboard + Agent
+- **Run in Agent** — status `in_progress`, prompt under `.proman/prompts/`, opens Agent with the prompt **pasted** into the input (you press Enter); via MCP the agent writes statuses and, on `done`, a `files` list
+- **Add subtask** / **Delete** in task details use IDE dialogs (webview `prompt`/`confirm` are unavailable)
 - **Drive Mode** — agent walks the queue via MCP `proman_*`
 - Tree structure changes only after your **Approve**
 - On activation, writes `.cursor/mcp.json` (`proman` server); after install, **enable** it in Settings → MCP and restart MCP / Reload Window
+- Do not edit `.proman/*.json` by hand — use UI / MCP tools only
 
 ### Team work (local)
 
@@ -158,6 +193,7 @@ In `project.json`:
 | Proman: My tasks / All | Assignee filter |
 | Proman: Assign Task | Assignment |
 | Proman: Agent Drive Tree | Drive Mode |
+| Proman: Run Task in Agent | Prompt + open Agent |
 | Proman: Git Pull / Push | Sync `.proman/` |
 | Proman: Enable Git Sync | Git backend |
 | Proman: Enable GitHub Issues | Issues bridge |
@@ -183,7 +219,7 @@ npm run install:cursor # package + install into Cursor
 
 ### Tests
 
-Unit tests for pure core: pathSafety, forest/security, MD export/import, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
+Unit tests: pathSafety, forest/security, taskFiles, MD export/import, handoff/Agent open, parsers, dependency/drive, history, GitHub links, projectMeta.
 
 ```bash
 npm test

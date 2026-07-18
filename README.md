@@ -15,8 +15,9 @@
 Разработчики и небольшие команды, которые хотят:
 
 - вести план рядом с кодом (файлы в репозитории);
-- **переносить план разработки** между проектами/репозиториями **с сохранением текущего прогресса** (экспорт в MD → импорт);
-- отдавать задачи Cursor Agent с контекстом и статусами;
+- генерировать план разработки в Cursor **по единому шаблону** и сразу импортировать в дерево;
+- **переносить план** между проектами **с сохранением прогресса** (экспорт MD → импорт);
+- отдавать задачи Cursor Agent с контекстом, статусами и списком затронутых файлов;
 - синхронизироваться через Git / GitHub Issues без тяжёлого PM-стека.
 
 ---
@@ -30,9 +31,42 @@
 5. (Опционально) `Proman: Set Current User` — кто вы в команде.
 6. (Опционально) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
 
-### План задач через Cursor
+### Шаблон плана в правилах Cursor
 
-Чтобы Agent сгенерировал список задач в формате, который Proman хорошо импортирует, в чате предложите шаблон [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) (скопируйте файл в проект или дайте ссылку/путь). Попросите Cursor составить roadmap/чеклист **по этому шаблону**, затем **Proman: Import Planning Docs**.
+Чтобы Cursor **стабильно** создавал план разработки в формате, который Proman импортирует без ручной правки, подключите шаблон [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) как правило проекта.
+
+1. Скопируйте шаблон в свой репозиторий (если его ещё нет), например:
+   `docs/templates/proman-tasks.md`
+2. Создайте правило Cursor:
+   - Cursor Settings → **Rules** → Project Rules → **Add Rule**, или
+   - файл `.cursor/rules/proman-plan.mdc` в корне проекта.
+3. Пример содержимого правила:
+
+```markdown
+---
+description: Планы разработки для Proman — только по шаблону proman-tasks.md
+alwaysApply: true
+---
+
+# План разработки (Proman)
+
+Когда пользователь просит roadmap, план задач, backlog или planning MD для этого проекта:
+
+1. Читай и следуй шаблону `docs/templates/proman-tasks.md` (frontmatter `type: plan`, заголовки, чекбоксы `- [ ]`, описания, Depends on, Оценка / Assignee / Теги / Код).
+2. Пиши результат в один `.md` файл (например `docs/plans/<name>.md`) в формате шаблона.
+3. Не придумывай другой формат списков задач: Proman парсит именно этот MD.
+4. После генерации напомни импортировать файл: команда **Proman: Import Planning Docs**.
+```
+
+4. Reload Window (или откройте новый чат), затем попросите, например:  
+   *«Составь план разработки по шаблону Proman»* / *«Сделай MD-план для фичи X»*.
+5. Импортируйте полученный файл: **Proman: Import Planning Docs**.
+
+Без правила можно разово указать путь к шаблону в чате — но правило избавляет от повторения и снижает «свободный» формат от модели.
+
+### План задач через Cursor (разово)
+
+В чате дайте путь к [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) и попросите составить roadmap **по этому шаблону**, затем **Proman: Import Planning Docs**.
 
 Данные проекта:
 
@@ -50,7 +84,7 @@
   proposals/
 ```
 
-Каждый файл из импорта → отдельная **секция** в панели Proman. Статусы пишутся в `trees/<slug>.json` и переживают reopen; повторный Import/Sync **мержит** структуру из MD, сохраняя `status` / assignee.
+Каждый файл из импорта → отдельная **секция** в панели Proman. Статусы пишутся в `trees/<slug>.json` и переживают reopen; повторный Import/Sync **мержит** структуру из MD, сохраняя `status` / assignee / `changedFiles`. Источник правды для UI — `trees/*`; плоский `tree.json` синхронизируется (в т.ч. после записей MCP).
 
 В **командном** репозитории коммитьте `.proman/` (не добавляйте его в `.gitignore`).
 
@@ -76,6 +110,7 @@
 - Несколько деревьев (секций) в одном проекте — по одному на импортированный план
 - Цвета иконок, Σ SP на эпиках, assignee в строке
 - Detail panel: описание, оценки, теги, зависимости, assign, комментарии, история
+- У **done**-задач: список **созданных/изменённых файлов** (клик → открыть в IDE); свои + done-подзадачи; источник — MCP `files` при `done`, иначе fallback на `Код:` / `Тесты:` из описания
 - Поиск по дереву + фильтр пути
 - **👤 Мои задачи** — фильтр по `team.currentUser`
 - **Экспорт секции в MD** с текущим прогрессом; **удаление дерева** с подтверждением
@@ -84,16 +119,18 @@
 
 - Импорт roadmap / plan / чеклистов → дерево
 - Frontmatter `type: plan` → id `plan_1`, `plan_2`, …
-- Шаблон для генерации списка задач: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — его стоит предлагать Cursor как образец формата
+- Шаблон: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — подключайте через **правила Cursor** (см. выше)
 - Пример meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
 - Round-trip: экспорт → MD → импорт **сохраняет прогресс** (чекбоксы + строки `Status:`)
 
 ### Agent / Drive Mode
 
-- **Run Task in Agent** — промпт в буфер + Agent
+- **Run in Agent** — статус `in_progress`, промпт в `.proman/prompts/`, открытие Agent с **вставкой промпта** в поле ввода (Enter отправляете вы); агент через MCP пишет статусы и при `done` — список `files`
+- **Add subtask** / **Delete** в деталях задачи — через диалоги IDE (в webview `prompt`/`confirm` недоступны)
 - **Drive Mode** — агент идёт по очереди через MCP `proman_*`
 - Структура дерева меняется только после вашего **Approve**
 - При активации пишется `.cursor/mcp.json` (сервер `proman`); после установки **включите** сервер в Settings → MCP и перезапустите MCP / Reload Window
+- Не правьте `.proman/*.json` вручную — только UI / MCP tools
 
 ### Командная работа (локально)
 
@@ -156,6 +193,7 @@
 | Proman: Мои задачи / Все | Фильтр assignee |
 | Proman: Assign Task | Назначение |
 | Proman: Agent Drive Tree | Drive Mode |
+| Proman: Run Task in Agent | Промпт + открытие Agent |
 | Proman: Git Pull / Push | Синхронизация `.proman/` |
 | Proman: Enable Git Sync | Git backend |
 | Proman: Enable GitHub Issues | Мост Issues |
@@ -181,7 +219,7 @@ npm run install:cursor # package + install в Cursor
 
 ### Тесты
 
-Unit-тесты на pure core: pathSafety, forest/security, MD export/import, parsers, dependency/drive logic, history helpers, GitHub link parsing, projectMeta.
+Unit-тесты: pathSafety, forest/security, taskFiles, MD export/import, handoff/Agent open, parsers, dependency/drive, history, GitHub links, projectMeta.
 
 ```bash
 npm test
