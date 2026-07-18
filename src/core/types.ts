@@ -37,6 +37,14 @@ export function statusLabel(status: TaskStatus): string {
   }
 }
 
+export type TaskFileKind = "created" | "modified";
+
+export interface TaskFileChange {
+  /** Path relative to workspace root */
+  path: string;
+  kind?: TaskFileKind;
+}
+
 export interface TaskNode {
   id: string;
   title: string;
@@ -58,6 +66,8 @@ export interface TaskNode {
   tests?: string[];
   /** Who owns the task (from «Assignee: …» / «Исполнитель: …») */
   assignee?: string;
+  /** Workspace-relative files created/modified while completing this task */
+  changedFiles?: TaskFileChange[];
 }
 
 export interface DependencyEdge {

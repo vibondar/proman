@@ -31011,6 +31011,37 @@ function resolvePlanningDir(workspaceRoot, planningDir) {
 function promanDir() {
   return path.join(workspace, ".proman");
 }
+function sanitizeTaskFilesMcp(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of raw) {
+    if (out.length >= 100) break;
+    const pathStr = typeof item === "string" ? item : item?.path;
+    if (typeof pathStr !== "string") continue;
+    if (!pathStr.trim() || pathStr.includes("\0") || pathStr.length > 500) continue;
+    let rel = pathStr.trim().replace(/\\/g, "/").replace(/^\.\/+/, "");
+    if (!rel || rel === "." || rel.split("/").some((s) => s === "..")) continue;
+    if (path.isAbsolute(pathStr.trim())) {
+      const abs = path.resolve(pathStr.trim());
+      const rootAbs = path.resolve(workspace);
+      const prefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep;
+      if (abs !== rootAbs && !abs.startsWith(prefix)) continue;
+      rel = path.relative(rootAbs, abs).replace(/\\/g, "/");
+      if (!rel || rel.startsWith("..")) continue;
+    } else {
+      const full = resolveInside(workspace, ...rel.split("/").filter(Boolean));
+      if (!full) continue;
+      rel = path.relative(path.resolve(workspace), full).replace(/\\/g, "/");
+      if (!rel || rel.startsWith("..")) continue;
+    }
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    const kind = item && typeof item === "object" && (item.kind === "created" || item.kind === "modified") ? item.kind : void 0;
+    out.push(kind ? { path: rel, kind } : { path: rel });
+  }
+  return out;
+}
 function applyFlatProgressToTrees(trees, flatTasks) {
   if (!flatTasks || typeof flatTasks !== "object") return false;
   const STATUSES = /* @__PURE__ */ new Set([
@@ -31301,22 +31332,37 @@ server.tool(
 );
 server.tool(
   "proman_set_task_status",
-  "Set task status: todo|new|in_progress|done|needs_rework|error|blocked. Colors in tree: todo=default, new=blue, done=green, needs_rework=yellow, error=red",
+  "Set task status: todo|new|in_progress|done|needs_rework|error|blocked. On done, pass files: [{path, kind?}] for created/modified workspace-relative paths.",
   {
     taskId: external_exports.string(),
-    status: external_exports.enum(["todo", "new", "in_progress", "done", "needs_rework", "error", "blocked"])
+    status: external_exports.enum(["todo", "new", "in_progress", "done", "needs_rework", "error", "blocked"]),
+    files: external_exports.array(
+      external_exports.object({
+        path: external_exports.string().max(500),
+        kind: external_exports.enum(["created", "modified"]).optional()
+      })
+    ).max(100).optional()
   },
-  async ({ taskId, status }) => {
+  async ({ taskId, status, files }) => {
     const state = loadState();
     if (!state) return err("no project");
     if (!state.tasks[taskId]) return err("not found");
     state.tasks[taskId].status = status;
+    if (files?.length) {
+      const cleaned = sanitizeTaskFilesMcp(files);
+      if (cleaned.length) state.tasks[taskId].changedFiles = cleaned;
+    }
     for (const tree of state.trees || []) {
-      if (tree.tasks?.[taskId]) tree.tasks[taskId].status = status;
+      if (tree.tasks?.[taskId]) {
+        tree.tasks[taskId].status = status;
+        if (state.tasks[taskId].changedFiles) {
+          tree.tasks[taskId].changedFiles = state.tasks[taskId].changedFiles;
+        }
+      }
     }
     applyBlocked(state);
     saveState(state);
-    return text({ ok: true, taskId, status });
+    return text({ ok: true, taskId, status, files: state.tasks[taskId].changedFiles ?? [] });
   }
 );
 server.tool(

@@ -2,7 +2,7 @@
   "name": "proman",
   "displayName": "Proman",
   "description": "Task tree in .proman/: statuses, Agent/MCP, team Git sync, GitHub Issues — for Cursor/VS Code developers.",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "publisher": "proman",
   "license": "MIT",
   "engines": {

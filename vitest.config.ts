@@ -23,6 +23,7 @@ export default defineConfig({
         "src/core/githubIssueLink.ts",
         "src/core/gitSync.ts",
         "src/core/forest.ts",
+        "src/core/taskFiles.ts",
         "src/agent/handoff.ts",
       ],
       exclude: ["src/core/workspaceIo.ts", "src/core/store.ts", "src/core/planDiscoverer.ts", "src/core/githubApi.ts"],

@@ -12,6 +12,7 @@ import {
   sanitizeLoadedTreeBundle,
   applyFlatProgressToTrees,
 } from "../src/core/forest";
+import { sanitizeTaskFiles } from "../src/core/taskFiles";
 import {
   applyStatusFromDescription,
   exportTreeToMarkdown,
@@ -37,6 +38,18 @@ function task(
     ...partial,
   };
 }
+
+describe("security: task file paths", () => {
+  it("sanitizeTaskFiles blocks workspace escape", () => {
+    expect(
+      sanitizeTaskFiles("/tmp/ws", [
+        "../../etc/passwd",
+        { path: "/etc/shadow", kind: "created" },
+        "ok.ts",
+      ])
+    ).toEqual([{ path: "ok.ts" }]);
+  });
+});
 
 describe("security: path / tree ids", () => {
   it("rejects traversal and absolute escape for tree JSON paths", () => {

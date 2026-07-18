@@ -10,6 +10,7 @@ import { ProjectStore } from "../core/store";
 import { DependencyEngine } from "../core/dependencyEngine";
 import { TaskNode, TaskStatus } from "../core/types";
 import { resolvePlanningDir } from "../core/pathSafety";
+import { sanitizeTaskFiles } from "../core/taskFiles";
 import { parseStructureOps } from "../core/proposalOps";
 import { wsMkdir, wsReadUri, wsWriteUri } from "../core/workspaceIo";
 
@@ -64,7 +65,7 @@ ${queuePreview || "(пусто)"}
 4. \`proman_get_task\` — контекст, зависимости, impact.
 5. Реализуй **только эту задачу** в коде. Не расползайся по дереву.
 6. По завершении выбери статус:
-   - \`done\` — готово (зелёный)
+   - \`done\` — готово (зелёный); передай \`files: [{ path, kind? }]\` (created|modified) — workspace-relative пути
    - \`needs_rework\` — сделано, но нужна доработка (жёлтый)
    - \`error\` — ошибка / блокер в реализации (красный)
    - или оставь \`in_progress\` + спроси человека, если неуверен.
@@ -162,7 +163,7 @@ export class PromanMcpServer {
       {
         name: "proman_set_task_status",
         description:
-          "Set task status: todo|new|in_progress|done|needs_rework|error|blocked (no human approve needed)",
+          "Set task status: todo|new|in_progress|done|needs_rework|error|blocked. On done, pass files: [{path, kind?}] for created/modified paths.",
         inputSchema: {
           type: "object",
           properties: {
@@ -170,6 +171,18 @@ export class PromanMcpServer {
             status: {
               type: "string",
               enum: ["todo", "new", "in_progress", "done", "needs_rework", "error", "blocked"],
+            },
+            files: {
+              type: "array",
+              description: "Workspace-relative files touched (especially with status=done)",
+              items: {
+                type: "object",
+                properties: {
+                  path: { type: "string" },
+                  kind: { type: "string", enum: ["created", "modified"] },
+                },
+                required: ["path"],
+              },
             },
           },
           required: ["taskId", "status"],
@@ -236,7 +249,11 @@ export class PromanMcpServer {
         case "proman_next_actionable":
           return this.ok(this.nextActionable());
         case "proman_set_task_status":
-          await this.setStatus(String(args.taskId), args.status as TaskStatus);
+          await this.setStatus(
+            String(args.taskId),
+            args.status as TaskStatus,
+            args.files
+          );
           return this.ok({ ok: true });
         case "proman_report_impact":
           await this.reportImpact(String(args.taskId), String(args.impactHint));
@@ -373,9 +390,22 @@ export class PromanMcpServer {
     };
   }
 
-  private async setStatus(taskId: string, status: TaskStatus) {
+  private async setStatus(
+    taskId: string,
+    status: TaskStatus,
+    files?: unknown
+  ) {
     await this.store.ensureInitialized();
-    this.store.setStatus(taskId, status);
+    const root = this.store.workspaceRoot;
+    let changedFiles: TaskNode["changedFiles"] | undefined;
+    if (files !== undefined && root) {
+      changedFiles = sanitizeTaskFiles(root, files);
+    }
+    this.store.setStatus(
+      taskId,
+      status,
+      changedFiles?.length ? { changedFiles } : undefined
+    );
     await this.store.save();
   }
 

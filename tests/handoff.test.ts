@@ -149,6 +149,7 @@ describe("AgentHandoff.buildTaskPrompt", () => {
     expect(prompt).toContain("Wire login");
     expect(prompt).toContain("proman_set_task_status");
     expect(prompt).toContain("proman_get_task");
+    expect(prompt).toContain("files");
     expect(prompt).toContain("Sub");
   });
 

@@ -6,7 +6,7 @@ Cursor / VS Code extension for managing development with a **task tree** stored 
 
 Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHub Issues bridge — without requiring Jira/Linear.
 
-**Version:** 0.3.14
+**Version:** 0.3.15
 
 ---
 

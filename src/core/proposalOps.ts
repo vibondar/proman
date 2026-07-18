@@ -42,6 +42,21 @@ function parseTaskNode(raw: unknown, index: number): TaskNode {
     code: Array.isArray(t.code) ? t.code.filter((x): x is string => typeof x === "string") : undefined,
     tests: Array.isArray(t.tests) ? t.tests.filter((x): x is string => typeof x === "string") : undefined,
     assignee: typeof t.assignee === "string" ? t.assignee : undefined,
+    changedFiles: Array.isArray(t.changedFiles)
+      ? t.changedFiles
+          .map((f) => {
+            if (typeof f === "string") return { path: f };
+            if (f && typeof f === "object" && typeof (f as { path?: unknown }).path === "string") {
+              const kind = (f as { kind?: unknown }).kind;
+              return {
+                path: (f as { path: string }).path,
+                kind: kind === "created" || kind === "modified" ? kind : undefined,
+              };
+            }
+            return null;
+          })
+          .filter((f): f is { path: string; kind?: "created" | "modified" } => !!f)
+      : undefined,
   };
 }
 

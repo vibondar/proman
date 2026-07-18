@@ -125,7 +125,7 @@ You are working in a project via the Proman extension. The task tree is the sour
 2. Implement code changes **only within this task**.
 3. Respect dependencies: do not break tasks listed under “Blocks”.
 4. When finished, call \`proman_set_task_status\` with one of:
-   - \`done\` — finished
+   - \`done\` — finished; **include \`files\`**: array of \`{ path, kind?\ }\` for created/modified workspace files (\`kind\`: \`created\`|\`modified\`)
    - \`needs_rework\` — done but needs rework
    - \`error\` — error / could not complete
    - \`in_progress\` — leftover work remains

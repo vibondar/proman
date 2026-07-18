@@ -160,6 +160,7 @@ export function mergeTreePreserveProgress(
           tags: node.tags?.length ? node.tags : old.tags,
           code: node.code?.length ? node.code : old.code,
           tests: node.tests?.length ? node.tests : old.tests,
+          changedFiles: old.changedFiles?.length ? old.changedFiles : node.changedFiles,
         },
       })[id];
     } else {

@@ -698,6 +698,7 @@ export class ProjectStore {
         | "code"
         | "tests"
         | "assignee"
+        | "changedFiles"
       >
     >
   ): TaskNode {
@@ -1089,8 +1090,16 @@ export class ProjectStore {
     return this.state?.tasks[taskId];
   }
 
-  setStatus(taskId: string, status: TaskStatus): void {
-    this.updateTask(taskId, { status });
+  setStatus(
+    taskId: string,
+    status: TaskStatus,
+    opts?: { changedFiles?: TaskNode["changedFiles"] }
+  ): void {
+    const patch: Parameters<ProjectStore["updateTask"]>[1] = { status };
+    if (opts?.changedFiles) {
+      patch.changedFiles = opts.changedFiles;
+    }
+    this.updateTask(taskId, patch);
     this.applyBlockedStatuses();
   }
 

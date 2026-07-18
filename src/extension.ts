@@ -32,7 +32,7 @@ let planningWatcher: vscode.FileSystemWatcher | undefined;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("Proman");
   context.subscriptions.push(output);
-  output.appendLine("Proman 0.3.13 activating…");
+  output.appendLine("Proman 0.3.15 activating…");
 
   const store = new ProjectStore(context);
   store.setLogger((msg) => output.appendLine(msg));

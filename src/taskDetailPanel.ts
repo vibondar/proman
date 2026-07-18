@@ -6,6 +6,7 @@ import { AgentHandoff } from "./agent/handoff";
 import { addComment, loadComments, TaskComment } from "./core/comments";
 import { historyForTask, HistoryEntry, loadHistory } from "./core/history";
 import { getMetaCurrentUser } from "./core/projectMeta";
+import { collectDoneTaskFiles, resolveTaskFilePath } from "./core/taskFiles";
 import { detailPanelUi, t } from "./i18n";
 
 type DetailMsg =
@@ -28,7 +29,8 @@ type DetailMsg =
   | { type: "copyPrompt" }
   | { type: "addComment"; text: string }
   | { type: "assignToMe" }
-  | { type: "pickAssignee" };
+  | { type: "pickAssignee" }
+  | { type: "openFile"; path: string };
 
 export class TaskDetailPanel {
   public static current: TaskDetailPanel | undefined;
@@ -262,6 +264,26 @@ export class TaskDetailPanel {
           await this.postState();
           break;
         }
+        case "openFile": {
+          const root = this.store.workspaceRoot;
+          if (!root) throw new Error("No workspace");
+          const full = resolveTaskFilePath(root, msg.path);
+          if (!full) {
+            void vscode.window.showWarningMessage(
+              t("Proman: cannot open path outside workspace")
+            );
+            return;
+          }
+          const uri = vscode.Uri.file(full);
+          try {
+            await vscode.window.showTextDocument(uri, { preview: true });
+          } catch {
+            void vscode.window.showWarningMessage(
+              t("Proman: file not found — {0}", msg.path)
+            );
+          }
+          break;
+        }
       }
     } catch (e) {
       void vscode.window.showErrorMessage(
@@ -316,6 +338,7 @@ export class TaskDetailPanel {
       comments: this.comments,
       history: this.history,
       currentUser: getMetaCurrentUser(state.meta) ?? null,
+      files: task.status === "done" ? collectDoneTaskFiles(state, task.id) : [],
     });
   }
 
@@ -376,6 +399,21 @@ export class TaskDetailPanel {
   .comment .when, .hist .when { opacity: 0.6; margin-left: 6px; font-weight: 400; }
   .comment .body { margin-top: 4px; white-space: pre-wrap; }
   .empty { opacity: 0.6; font-size: 12px; }
+  .files { list-style: none; margin: 4px 0 0; padding: 0; }
+  .files li {
+    padding: 4px 0;
+    border-bottom: 1px solid var(--vscode-panel-border, rgba(127,127,127,.2));
+    font-size: 12px;
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+  }
+  .files a.file-link {
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .files a.file-link:hover { text-decoration: underline; }
+  .files .meta { opacity: 0.65; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -436,6 +474,23 @@ export class TaskDetailPanel {
             '<div class="hist"><span class="who">@'+esc(h.actor)+'</span><span class="when">'+esc(fmtTime(h.at))+'</span><div>'+histLine(h)+'</div></div>'
           ).join('')
         : '<div class="empty">'+esc(ui.historyEmpty)+'</div>';
+      const files = data.files || [];
+      const filesHtml = task.status === 'done'
+        ? (files.length
+            ? '<ul class="files">'+files.map(function(f) {
+                const bits = [];
+                if (f.kind === 'created') bits.push(esc(ui.fileCreated));
+                else if (f.kind === 'modified') bits.push(esc(ui.fileModified));
+                if (f.fromPlan) bits.push(esc(ui.fileFromPlan));
+                if (f.fromTaskTitle) bits.push(esc(fmt(ui.fileFromSubtask, f.fromTaskTitle)));
+                const meta = bits.length ? ' <span class="meta">('+bits.join(' · ')+')</span>' : '';
+                return '<li><a class="file-link" href="#" data-path="'+esc(f.path)+'">'+esc(f.path)+'</a>'+meta+'</li>';
+              }).join('')+'</ul>'
+            : '<div class="empty">'+esc(ui.filesEmpty)+'</div>')
+        : '';
+      const filesSection = task.status === 'done'
+        ? '<h2>'+esc(fmt(ui.filesHeading, files.length))+'</h2>'+filesHtml
+        : '';
       const youBit = me ? fmt(ui.you, esc(me)) : esc(ui.userUnset);
       const branchBit = fmt(ui.branchProgress, data.progress.done, data.progress.total);
       const blocksHint = data.blocked.length
@@ -491,6 +546,8 @@ export class TaskDetailPanel {
           <button class="danger" id="del">\${esc(ui.delete)}</button>
         </div>
 
+        \${filesSection}
+
         <h2>\${esc(fmt(ui.comments, comments.length))}</h2>
         <div class="comments">\${commentHtml}</div>
         <label>\${esc(ui.newComment)}</label>
@@ -533,6 +590,13 @@ export class TaskDetailPanel {
       };
       document.getElementById('assignMe').onclick = () => vscode.postMessage({ type: 'assignToMe' });
       document.getElementById('pickAssignee').onclick = () => vscode.postMessage({ type: 'pickAssignee' });
+      root.querySelectorAll('a.file-link').forEach(function(a) {
+        a.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          const p = a.getAttribute('data-path');
+          if (p) vscode.postMessage({ type: 'openFile', path: p });
+        });
+      });
     }
 
     window.addEventListener('message', e => render(e.data));

@@ -79,5 +79,11 @@ export function detailPanelUi() {
     clearAssignee: t("Clear assignment"),
     assignTitle: t("Assign task"),
     assigneePrompt: t("Assignee (without @)"),
+    filesHeading: t("Files ({0})"),
+    filesEmpty: t("No files recorded for this task yet"),
+    fileCreated: t("created"),
+    fileModified: t("modified"),
+    fileFromPlan: t("from plan"),
+    fileFromSubtask: t("subtask: {0}"),
   };
 }
