@@ -22,7 +22,8 @@ type DetailMsg =
       tags?: string;
     }
   | { type: "delete"; mode: "promote" | "cascade" }
-  | { type: "addChild"; title: string }
+  | { type: "addChild"; title?: string }
+  | { type: "requestDelete" }
   | { type: "runAgent" }
   | { type: "copyPrompt" }
   | { type: "addComment"; text: string }
@@ -141,12 +142,36 @@ export class TaskDetailPanel {
           break;
         }
         case "addChild": {
-          const child = this.store.addTask(this.taskId, msg.title);
+          // Webviews cannot use window.prompt — ask on the extension host.
+          const title =
+            (typeof msg.title === "string" && msg.title.trim()) ||
+            (await vscode.window.showInputBox({
+              prompt: t("Subtask title"),
+              placeHolder: t("e.g. Auth refactor"),
+            }));
+          if (!title?.trim()) return;
+          const child = this.store.addTask(this.taskId, title.trim());
           await this.store.save();
           const { createIssueForTask } = await import("./githubSync");
           await createIssueForTask(this.store, child.id);
           this.onChanged();
           await this.postState();
+          break;
+        }
+        case "requestDelete": {
+          const mode = await vscode.window.showQuickPick(
+            [
+              { label: t("Promote children to parent"), mode: "promote" as const },
+              { label: t("Delete with children"), mode: "cascade" as const },
+            ],
+            { title: t("Delete task") }
+          );
+          if (!mode) return;
+          this.store.deleteTask(this.taskId, mode.mode);
+          this.store.applyBlockedStatuses();
+          await this.store.save();
+          this.onChanged();
+          this.panel.dispose();
           break;
         }
         case "runAgent":
@@ -494,14 +519,12 @@ export class TaskDetailPanel {
         });
       };
       document.getElementById('addChild').onclick = () => {
-        const title = prompt(ui.promptChild);
-        if (title) vscode.postMessage({ type: 'addChild', title });
+        vscode.postMessage({ type: 'addChild' });
       };
       document.getElementById('run').onclick = () => vscode.postMessage({ type: 'runAgent' });
       document.getElementById('copy').onclick = () => vscode.postMessage({ type: 'copyPrompt' });
       document.getElementById('del').onclick = () => {
-        const cascade = confirm(ui.confirmDelete);
-        vscode.postMessage({ type: 'delete', mode: cascade ? 'cascade' : 'promote' });
+        vscode.postMessage({ type: 'requestDelete' });
       };
       document.getElementById('addComment').onclick = () => {
         const text = document.getElementById('commentText').value;

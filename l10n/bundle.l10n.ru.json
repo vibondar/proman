@@ -216,6 +216,8 @@
   "Task description will be sent to a GitHub Issue. Do not include secrets/tokens.": "Описание задачи будет отправлено в GitHub Issue. Не включайте секреты/токены.",
   "Task not found. Select a node in the Proman tree.": "Задача не найдена. Выберите узел в дереве Proman.",
   "Task prompt copied. Paste into Agent (Cmd+V) if the chat is empty.": "Промпт задачи скопирован. Вставьте в Agent (Cmd+V), если чат пуст.",
+  "Agent opened with the task prompt. Review and press Enter to send.": "Agent открыт с промптом задачи. Проверьте и нажмите Enter, чтобы отправить.",
+  "Drive Mode: Agent opened with the prompt. Press Enter to send. Statuses go to the tree; structure only after Approve.": "Drive Mode: Agent открыт с промптом. Нажмите Enter, чтобы отправить. Статусы пишутся в дерево; структура — только после Approve.",
   "Tasks not found": "Задачи не найдены",
   "tests: {0}": "тесты: {0}",
   "Title": "Название",

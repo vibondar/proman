@@ -1,4 +1,5 @@
 /** Minimal vscode stub for unit tests of core modules that transitively import workspaceIo. */
+
 export const Uri = {
   file(fsPath: string) {
     return { fsPath, path: fsPath, scheme: "file" };
@@ -39,6 +40,54 @@ export const window = {
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
   showErrorMessage: async () => undefined,
+  showInputBox: async () => undefined,
+  showQuickPick: async () => undefined,
 };
 
-export default { Uri, workspace, l10n, window };
+type CmdHandler = (cmd: string, ...args: unknown[]) => Promise<unknown> | unknown;
+
+let clipboardText = "";
+let commandHandler: CmdHandler = async () => {
+  throw new Error("command not stubbed");
+};
+const executed: Array<{ cmd: string; args: unknown[] }> = [];
+
+export const env = {
+  clipboard: {
+    async writeText(text: string) {
+      clipboardText = String(text);
+    },
+    async readText() {
+      return clipboardText;
+    },
+  },
+};
+
+export const commands = {
+  async executeCommand(cmd: string, ...args: unknown[]) {
+    executed.push({ cmd, args });
+    return commandHandler(cmd, ...args);
+  },
+};
+
+/** Test helpers — not part of the real vscode API. */
+export const __test = {
+  reset() {
+    clipboardText = "";
+    executed.length = 0;
+    commandHandler = async () => {
+      throw new Error("command not stubbed");
+    };
+  },
+  setCommandHandler(handler: CmdHandler) {
+    commandHandler = handler;
+  },
+  getClipboard() {
+    return clipboardText;
+  },
+  getExecuted() {
+    return [...executed];
+  },
+};
+
+export default { Uri, workspace, l10n, window, env, commands };

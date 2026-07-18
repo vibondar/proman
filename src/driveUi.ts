@@ -7,6 +7,7 @@ import {
 import { parseStructureOps } from "./core/proposalOps";
 import { wsMkdir, wsReadUri } from "./core/workspaceIo";
 import { PromanMcpServer } from "./mcp/promanMcp";
+import { openAgentWithPrompt } from "./agent/handoff";
 import { t } from "./i18n";
 
 /**
@@ -85,33 +86,16 @@ export function startProposalWatcher(
   };
 }
 
-async function tryOpenAgent(): Promise<boolean> {
-  const candidates = [
-    "composer.newAgentChat",
-    "composer.createNewComposer",
-    "aichat.newchataction",
-    "workbench.action.chat.open",
-  ];
-  for (const cmd of candidates) {
-    try {
-      await vscode.commands.executeCommand(cmd);
-      return true;
-    } catch {
-      /* next */
-    }
-  }
-  return false;
-}
-
 export async function startDriveMode(mcp: PromanMcpServer): Promise<void> {
   const drive = mcp.getDrive();
   const file = await drive.startDriveHandoff();
-  await tryOpenAgent();
+  const text = Buffer.from(await vscode.workspace.fs.readFile(file)).toString("utf8");
+  await openAgentWithPrompt(text);
   const openPrompt = t("Open prompt");
   const stopDrive = t("Stop Drive");
   const pick = await vscode.window.showInformationMessage(
     t(
-      "Drive Mode: prompt is on the clipboard. Paste into Agent (Cmd+V) and send. Statuses are written to the tree; structure only after Approve."
+      "Drive Mode: Agent opened with the prompt. Press Enter to send. Statuses go to the tree; structure only after Approve."
     ),
     openPrompt,
     stopDrive

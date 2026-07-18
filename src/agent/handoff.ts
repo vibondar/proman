@@ -3,6 +3,58 @@ import { ProjectStore } from "../core/store";
 import { DependencyEngine } from "../core/dependencyEngine";
 import { t } from "../i18n";
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Open Cursor Agent and put `prompt` into the chat input.
+ * Cursor has no stable public API to pass a prompt; clipboard + paste is the
+ * supported workaround. Does not auto-send — user reviews and presses Enter.
+ */
+export async function openAgentWithPrompt(prompt: string): Promise<boolean> {
+  await vscode.env.clipboard.writeText(prompt);
+
+  // Prefer commands that accept a query when available (VS Code / newer Cursor).
+  const withArgs: Array<[string, unknown]> = [
+    ["workbench.action.chat.open", { query: prompt }],
+    ["workbench.action.chat.open", prompt],
+    ["cursor.startComposerPrompt", prompt],
+  ];
+  for (const [cmd, arg] of withArgs) {
+    try {
+      await vscode.commands.executeCommand(cmd, arg);
+      return true;
+    } catch {
+      /* try next */
+    }
+  }
+
+  const openCmds = [
+    "composer.newAgentChat",
+    "composer.createNewComposer",
+    "aichat.newchataction",
+    "workbench.action.chat.open",
+    "workbench.panel.chat.view.copilot.focus",
+  ];
+  for (const cmd of openCmds) {
+    try {
+      await vscode.commands.executeCommand(cmd);
+      // Wait for Agent input to focus, then paste clipboard.
+      await delay(200);
+      try {
+        await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+      } catch {
+        /* paste may fail if focus isn't in an input — prompt stays on clipboard */
+      }
+      return true;
+    } catch {
+      /* try next */
+    }
+  }
+  return false;
+}
+
 export class AgentHandoff {
   constructor(
     private readonly store: ProjectStore,
@@ -138,6 +190,13 @@ TaskNode schema:`,
     return file;
   }
 
+  /**
+   * Run task in Agent:
+   * 1) mark in_progress
+   * 2) write prompt under .proman/prompts/
+   * 3) open Agent and paste prompt into the input (user sends with Enter)
+   * 4) agent uses MCP proman_* to update statuses when done
+   */
   async runTask(taskId: string): Promise<void> {
     await this.store.ensureInitialized();
     this.store.setStatus(taskId, "in_progress");
@@ -145,9 +204,8 @@ TaskNode schema:`,
 
     const prompt = this.buildTaskPrompt(taskId);
     const file = await this.savePrompt(taskId, prompt);
-    await vscode.env.clipboard.writeText(prompt);
 
-    const opened = await this.tryOpenCursorAgent(prompt);
+    const opened = await openAgentWithPrompt(prompt);
     if (!opened) {
       await vscode.window.showTextDocument(file);
       const openChat = t("Open Chat");
@@ -158,11 +216,11 @@ TaskNode schema:`,
         openChat
       );
       if (pick === openChat) {
-        await this.tryOpenCursorAgent(prompt);
+        await openAgentWithPrompt(prompt);
       }
     } else {
       vscode.window.showInformationMessage(
-        t("Task prompt copied. Paste into Agent (Cmd+V) if the chat is empty.")
+        t("Agent opened with the task prompt. Review and press Enter to send.")
       );
     }
   }
@@ -171,12 +229,15 @@ TaskNode schema:`,
     await this.store.ensureInitialized();
     const prompt = this.buildEnrichPrompt();
     const file = await this.savePrompt("enrich", prompt);
-    await vscode.env.clipboard.writeText(prompt);
-    const opened = await this.tryOpenCursorAgent(prompt);
+    const opened = await openAgentWithPrompt(prompt);
     if (!opened) {
       await vscode.window.showTextDocument(file);
       vscode.window.showInformationMessage(
         t("Enrichment prompt copied. Paste into Cursor Agent.")
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        t("Agent opened with the task prompt. Review and press Enter to send.")
       );
     }
   }
@@ -186,24 +247,5 @@ TaskNode schema:`,
     await this.savePrompt(taskId, prompt);
     await vscode.env.clipboard.writeText(prompt);
     vscode.window.showInformationMessage(t("Prompt copied to clipboard"));
-  }
-
-  private async tryOpenCursorAgent(_prompt: string): Promise<boolean> {
-    const candidates = [
-      "composer.newAgentChat",
-      "composer.createNewComposer",
-      "aichat.newchataction",
-      "workbench.action.chat.open",
-      "workbench.panel.chat.view.copilot.focus",
-    ];
-    for (const cmd of candidates) {
-      try {
-        await vscode.commands.executeCommand(cmd);
-        return true;
-      } catch {
-        /* try next */
-      }
-    }
-    return false;
   }
 }
