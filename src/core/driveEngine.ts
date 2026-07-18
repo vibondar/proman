@@ -17,6 +17,7 @@ import {
   pullFlatIntoForest,
   sanitizeLoadedTreeBundle,
   syncMetaTrees,
+  applyFlatProgressToTrees,
 } from "./forest";
 import { normalizeProjectMeta } from "./projectMeta";
 
@@ -45,6 +46,15 @@ export async function loadProjectState(workspaceRoot: string): Promise<ProjectSt
   }
 
   if (trees.length) {
+    const treeText = await wsReadText(workspaceRoot, PROMAN, "tree.json");
+    if (treeText) {
+      try {
+        const flat = JSON.parse(treeText) as { tasks?: Record<string, TaskNode> };
+        applyFlatProgressToTrees(trees, flat.tasks);
+      } catch {
+        /* ignore */
+      }
+    }
     return projectStateFromForest(meta, trees);
   }
 

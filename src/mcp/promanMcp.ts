@@ -97,8 +97,10 @@ ${queuePreview || "(пусто)"}
 Tools: proman_get_tree, proman_get_task, proman_next_actionable, proman_set_task_status,
 proman_report_impact, proman_propose_structure_change, proman_get_proposal_status.
 
+**Не редактируй** файлы \`.proman/tree.json\` / \`.proman/trees/*.json\` вручную — только через tools; иначе UI и MCP разъедутся.
+
 Если MCP недоступен: скажи человеку включить сервер proman в Settings → MCP и сделать Reload Window.
-Не выдумывай статусы — читай \`.proman/tree.json\`.
+Не выдумывай статусы — читай дерево через \`proman_get_tree\` / \`proman_get_task\` (не правь \`.proman/*.json\` вручную: UI читает \`trees/*.json\`, плоский \`tree.json\` — снимок).
 
 Начни сейчас: вызови \`proman_next_actionable\` и покажи человеку план на первую задачу (1–3 пункта), затем приступай.
 `;

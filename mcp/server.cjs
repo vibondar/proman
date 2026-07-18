@@ -31011,6 +31011,51 @@ function resolvePlanningDir(workspaceRoot, planningDir) {
 function promanDir() {
   return path.join(workspace, ".proman");
 }
+function applyFlatProgressToTrees(trees, flatTasks) {
+  if (!flatTasks || typeof flatTasks !== "object") return false;
+  const STATUSES = /* @__PURE__ */ new Set([
+    "todo",
+    "new",
+    "in_progress",
+    "done",
+    "needs_rework",
+    "error",
+    "blocked"
+  ]);
+  let changed = false;
+  for (const tree of trees) {
+    if (!isSafeId(tree.id) || !tree.tasks) continue;
+    let treeChanged = false;
+    for (const id of Object.keys(tree.tasks)) {
+      const flat = flatTasks[id];
+      const node = tree.tasks[id];
+      if (!flat || !node) continue;
+      if (flat.status && flat.status !== node.status && STATUSES.has(flat.status)) {
+        node.status = flat.status;
+        treeChanged = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(flat, "assignee")) {
+        const next = typeof flat.assignee === "string" ? flat.assignee.replace(/^@+/, "").slice(0, 200) || void 0 : void 0;
+        if (next !== node.assignee) {
+          node.assignee = next;
+          treeChanged = true;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(flat, "impactHint")) {
+        const hint = typeof flat.impactHint === "string" ? flat.impactHint.slice(0, 2e3) : void 0;
+        if (hint !== (node.impactHint ?? void 0)) {
+          node.impactHint = hint;
+          treeChanged = true;
+        }
+      }
+    }
+    if (treeChanged) {
+      tree.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      changed = true;
+    }
+  }
+  return changed;
+}
 function loadState() {
   const metaPath = path.join(promanDir(), "project.json");
   if (!fs.existsSync(metaPath)) return null;
@@ -31029,6 +31074,14 @@ function loadState() {
     }
   }
   if (trees.length) {
+    const treePath2 = path.join(promanDir(), "tree.json");
+    if (fs.existsSync(treePath2)) {
+      try {
+        const flat = JSON.parse(fs.readFileSync(treePath2, "utf8"));
+        applyFlatProgressToTrees(trees, flat.tasks || {});
+      } catch {
+      }
+    }
     const tasks = {};
     const roots = [];
     for (const tree2 of trees) {
@@ -31258,6 +31311,9 @@ server.tool(
     if (!state) return err("no project");
     if (!state.tasks[taskId]) return err("not found");
     state.tasks[taskId].status = status;
+    for (const tree of state.trees || []) {
+      if (tree.tasks?.[taskId]) tree.tasks[taskId].status = status;
+    }
     applyBlocked(state);
     saveState(state);
     return text({ ok: true, taskId, status });

@@ -4,6 +4,8 @@ import {
   ProjectMeta,
   ProjectState,
   TaskNode,
+  TaskStatus,
+  TASK_STATUSES,
   TreeBundle,
   TreeDescriptor,
 } from "./types";
@@ -250,6 +252,58 @@ export function findTreeIdForTask(trees: TreeBundle[], taskId: string): string |
 
 export function findTree(trees: TreeBundle[], treeId: string): TreeBundle | undefined {
   return trees.find((t) => t.id === treeId);
+}
+
+/**
+ * Copy progress fields from a flat `tree.json` snapshot into per-tree bundles.
+ * Fixes desync when MCP/agent updates `.proman/tree.json` but UI reads `trees/*.json`.
+ * Returns true if any node changed.
+ */
+export function applyFlatProgressToTrees(
+  trees: TreeBundle[],
+  flatTasks: Record<string, TaskNode> | null | undefined
+): boolean {
+  if (!flatTasks || typeof flatTasks !== "object") return false;
+  let changed = false;
+  for (const tree of trees) {
+    if (!isSafeId(tree.id) || !tree.tasks) continue;
+    let treeChanged = false;
+    for (const id of Object.keys(tree.tasks)) {
+      const flat = flatTasks[id];
+      const node = tree.tasks[id];
+      if (!flat || !node) continue;
+      if (flat.status && flat.status !== node.status) {
+        if ((TASK_STATUSES as readonly string[]).includes(flat.status)) {
+          node.status = flat.status as TaskStatus;
+          treeChanged = true;
+        }
+      }
+      if ("assignee" in flat) {
+        const next =
+          typeof flat.assignee === "string"
+            ? flat.assignee.replace(/^@+/, "").slice(0, 200) || undefined
+            : undefined;
+        if (next !== node.assignee) {
+          node.assignee = next;
+          treeChanged = true;
+        }
+      }
+      if ("impactHint" in flat) {
+        const hint =
+          typeof flat.impactHint === "string" ? flat.impactHint.slice(0, 2000) : undefined;
+        if (hint !== (node.impactHint ?? undefined)) {
+          node.impactHint = hint;
+          treeChanged = true;
+        }
+      }
+    }
+    if (treeChanged) {
+      tree.edges = edgesFromTasks(tree.tasks);
+      tree.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export function projectStateFromForest(

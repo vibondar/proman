@@ -33,6 +33,7 @@ import { gitCommitProman, isGitRepo } from "./gitSync";
 import { sanitizeErrorMessage } from "./githubIssueLink";
 import { t } from "../i18n";
 import {
+  applyFlatProgressToTrees,
   edgesFromTasks,
   emptyTreeBundle,
   findTree,
@@ -84,6 +85,10 @@ export class ProjectStore {
   private pendingStatusCommit: { taskId: string; title: string; from?: string; to: string } | null =
     null;
   private gitBusy = false;
+  /** Wall clock of last local mutation / successful load|save — used to absorb newer MCP flat writes. */
+  private lastLocalMutationMs = 0;
+  /** Optional: suppress file watcher while we write .proman/ */
+  onBeforeWriteDisk?: () => void;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -251,7 +256,38 @@ export class ProjectStore {
         return null;
       }
 
+      // Heal forest from flat tree.json (MCP may update only the snapshot).
+      const flatText = await wsReadText(root, PROMAN_DIR, "tree.json");
+      let healed = false;
+      if (flatText) {
+        try {
+          const flat = JSON.parse(flatText) as { tasks?: Record<string, TaskNode> };
+          healed = applyFlatProgressToTrees(trees, flat.tasks);
+        } catch {
+          /* ignore corrupt flat */
+        }
+      }
+
       this.state = projectStateFromForest(meta, trees);
+      this.lastLocalMutationMs = Date.now();
+
+      if (healed) {
+        this.log("load: healed trees/* from tree.json progress");
+        try {
+          this.onBeforeWriteDisk?.();
+          for (const tree of this.state.trees) {
+            await wsWriteTreeJson(root, tree.id, JSON.stringify(tree, null, 2));
+          }
+          await wsWriteText(
+            root,
+            [PROMAN_DIR, "tree.json"],
+            JSON.stringify({ roots: this.state.roots, tasks: this.state.tasks }, null, 2)
+          );
+        } catch (e) {
+          this.log(`load: heal write failed ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       const me = getMetaCurrentUser(this.state.meta);
       if (me && this.prevAssignees.size > 0) {
         const hist = await loadHistory(root);
@@ -311,10 +347,12 @@ export class ProjectStore {
       }
       return;
     }
+    await this.absorbNewerFlatProgressFromDisk();
     this.rebuildFlat();
     this.state.meta.updatedAt = new Date().toISOString();
     this.state.meta = syncMetaTrees(normalizeProjectMeta(this.state.meta), this.state.trees);
     const root = folder.uri.fsPath;
+    this.onBeforeWriteDisk?.();
     await wsMkdir(root, PROMAN_DIR, "prompts");
     await wsMkdir(root, PROMAN_DIR, "imports");
     await wsMkdir(root, PROMAN_DIR, "comments");
@@ -359,6 +397,7 @@ export class ProjectStore {
         this.pendingHistory.unshift(...batch);
       }
     }
+    this.lastLocalMutationMs = Date.now();
     this.log(
       `save: ok trees=${this.state.trees.length} roots=${this.state.roots.length} tasks=${Object.keys(this.state.tasks).length}`
     );
@@ -369,6 +408,29 @@ export class ProjectStore {
 
     if (statusCommit) {
       void this.maybeAutoCommitStatus(statusCommit);
+    }
+  }
+
+  /**
+   * If MCP/agent wrote a newer `.proman/tree.json` than our last local mutation,
+   * pull progress into in-memory trees so we do not clobber it on save.
+   */
+  private async absorbNewerFlatProgressFromDisk(): Promise<void> {
+    if (!this.state || !this.folder) return;
+    const root = this.folder.uri.fsPath;
+    const flatPath = path.join(root, PROMAN_DIR, "tree.json");
+    try {
+      const st = await vscode.workspace.fs.stat(vscode.Uri.file(flatPath));
+      if (st.mtime <= this.lastLocalMutationMs) return;
+      const treeText = await wsReadText(root, PROMAN_DIR, "tree.json");
+      if (!treeText) return;
+      const flat = JSON.parse(treeText) as { tasks?: Record<string, TaskNode> };
+      if (applyFlatProgressToTrees(this.state.trees, flat.tasks)) {
+        this.log("save: absorbed newer progress from tree.json");
+        this.rebuildFlat();
+      }
+    } catch {
+      /* missing or unreadable — ignore */
     }
   }
 
@@ -716,6 +778,7 @@ export class ProjectStore {
     }
 
     this.syncTaskToTree(taskId);
+    this.lastLocalMutationMs = Date.now();
     return task;
   }
 

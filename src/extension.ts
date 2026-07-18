@@ -575,7 +575,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   refreshUi();
   setupPlanningWatcher(store, importer, refreshUi);
-  context.subscriptions.push(startTreeFileWatcher(store, refreshUi));
+  const treeWatcher = startTreeFileWatcher(store, refreshUi);
+  store.onBeforeWriteDisk = () => treeWatcher.markSelfWrite();
+  context.subscriptions.push(treeWatcher);
 
   // Background: closed GitHub Issues → done (no login popup)
   void syncClosedGithubIssues(store, { interactive: false }).then((n) => {

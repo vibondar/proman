@@ -9,6 +9,7 @@ import {
   sanitizeLoadedTreeBundle,
   pullFlatIntoForest,
   isNamespacedUnderTree,
+  applyFlatProgressToTrees,
 } from "../src/core/forest";
 import { ProjectState, TaskNode } from "../src/core/types";
 
@@ -210,5 +211,36 @@ describe("forest", () => {
     expect(state.tasks.a.title).toBe("A");
     const flat = flattenForest(state.trees);
     expect(flat.roots).toEqual(["a"]);
+  });
+
+  it("applyFlatProgressToTrees heals stale trees from tree.json snapshot", () => {
+    const trees = [
+      {
+        id: "stomtari_design_align_plan",
+        title: "Plan",
+        roots: ["stomtari_design_align_plan__plan_1"],
+        tasks: {
+          stomtari_design_align_plan__plan_1: task({
+            id: "stomtari_design_align_plan__plan_1",
+            title: "A",
+            status: "todo",
+          }),
+        },
+        edges: [],
+        updatedAt: "",
+      },
+    ];
+    const flat = {
+      stomtari_design_align_plan__plan_1: task({
+        id: "stomtari_design_align_plan__plan_1",
+        title: "A",
+        status: "done",
+        assignee: "alice",
+      }),
+    };
+    expect(applyFlatProgressToTrees(trees, flat)).toBe(true);
+    expect(trees[0].tasks.stomtari_design_align_plan__plan_1.status).toBe("done");
+    expect(trees[0].tasks.stomtari_design_align_plan__plan_1.assignee).toBe("alice");
+    expect(applyFlatProgressToTrees(trees, flat)).toBe(false);
   });
 });

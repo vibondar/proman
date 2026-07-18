@@ -10,6 +10,7 @@ import {
   isNamespacedUnderTree,
   namespaceTaskIds,
   sanitizeLoadedTreeBundle,
+  applyFlatProgressToTrees,
 } from "../src/core/forest";
 import {
   applyStatusFromDescription,
@@ -23,6 +24,19 @@ import {
   sanitizeErrorMessage,
 } from "../src/core/githubIssueLink";
 import { sanitizeGitCommitMessage } from "../src/core/gitSync";
+
+function task(
+  partial: Partial<TaskNode> & { id: string; title: string }
+): TaskNode {
+  return {
+    description: "",
+    status: "todo",
+    children: [],
+    dependsOn: [],
+    source: "md:test",
+    ...partial,
+  };
+}
 
 describe("security: path / tree ids", () => {
   it("rejects traversal and absolute escape for tree JSON paths", () => {
@@ -117,6 +131,132 @@ describe("security: forest load / namespace", () => {
     expect(isNamespacedUnderTree("plan", "plan_auth__x")).toBe(false);
     expect(isNamespacedUnderTree("plan", "plan__x")).toBe(true);
     expect(isNamespacedUnderTree("plan_auth", "plan__x")).toBe(false);
+  });
+});
+
+describe("security: flat→trees progress heal", () => {
+  it("does not invent tasks from flat that are absent in trees", () => {
+    const trees: TreeBundle[] = [
+      {
+        id: "plan_a",
+        title: "A",
+        roots: ["plan_a__t1"],
+        tasks: {
+          plan_a__t1: task({ id: "plan_a__t1", title: "T1", status: "todo" }),
+        },
+        edges: [],
+        updatedAt: "",
+      },
+    ];
+    const flat = {
+      plan_a__t1: task({ id: "plan_a__t1", title: "T1", status: "done" }),
+      plan_a__injected: task({
+        id: "plan_a__injected",
+        title: "evil",
+        status: "done",
+      }),
+      "../etc/passwd": task({ id: "../etc/passwd", title: "x", status: "done" }),
+    };
+    expect(applyFlatProgressToTrees(trees, flat)).toBe(true);
+    expect(Object.keys(trees[0].tasks)).toEqual(["plan_a__t1"]);
+    expect(trees[0].tasks.plan_a__t1.status).toBe("done");
+  });
+
+  it("does not cross-write progress into another tree", () => {
+    const trees: TreeBundle[] = [
+      {
+        id: "alpha",
+        title: "A",
+        roots: ["alpha__t"],
+        tasks: { alpha__t: task({ id: "alpha__t", title: "A", status: "todo" }) },
+        edges: [],
+        updatedAt: "",
+      },
+      {
+        id: "beta",
+        title: "B",
+        roots: ["beta__t"],
+        tasks: { beta__t: task({ id: "beta__t", title: "B", status: "todo" }) },
+        edges: [],
+        updatedAt: "",
+      },
+    ];
+    applyFlatProgressToTrees(trees, {
+      alpha__t: task({ id: "alpha__t", title: "A", status: "done" }),
+    });
+    expect(trees[0].tasks.alpha__t.status).toBe("done");
+    expect(trees[1].tasks.beta__t.status).toBe("todo");
+  });
+
+  it("skips bundles with unsafe tree ids", () => {
+    const trees = [
+      {
+        id: "../evil",
+        title: "X",
+        roots: ["t"],
+        tasks: { t: task({ id: "t", title: "T", status: "todo" }) },
+        edges: [],
+        updatedAt: "",
+      },
+    ] as TreeBundle[];
+    expect(
+      applyFlatProgressToTrees(trees, {
+        t: task({ id: "t", title: "T", status: "done" }),
+      })
+    ).toBe(false);
+    expect(trees[0].tasks.t.status).toBe("todo");
+  });
+
+  it("rejects invalid status and caps assignee/impact payloads", () => {
+    const trees: TreeBundle[] = [
+      {
+        id: "safe",
+        title: "S",
+        roots: ["safe__t"],
+        tasks: {
+          safe__t: task({ id: "safe__t", title: "T", status: "todo" }),
+        },
+        edges: [],
+        updatedAt: "",
+      },
+    ];
+    expect(
+      applyFlatProgressToTrees(trees, {
+        safe__t: {
+          ...task({ id: "safe__t", title: "T" }),
+          status: "rm -rf /" as TaskNode["status"],
+          assignee: `@${"a".repeat(500)}`,
+          impactHint: "h".repeat(5000),
+        },
+      })
+    ).toBe(true);
+    expect(trees[0].tasks.safe__t.status).toBe("todo");
+    expect(trees[0].tasks.safe__t.assignee?.length).toBe(200);
+    expect(trees[0].tasks.safe__t.impactHint?.length).toBe(2000);
+  });
+
+  it("ignores prototype-pollution keys in flat map", () => {
+    const trees: TreeBundle[] = [
+      {
+        id: "safe",
+        title: "S",
+        roots: ["safe__t"],
+        tasks: {
+          safe__t: task({ id: "safe__t", title: "T", status: "todo" }),
+        },
+        edges: [],
+        updatedAt: "",
+      },
+    ];
+    const flat = Object.create(null) as Record<string, TaskNode>;
+    flat["__proto__"] = task({ id: "__proto__", title: "p", status: "done" });
+    flat.constructor = task({ id: "constructor", title: "c", status: "done" });
+    flat.safe__t = task({ id: "safe__t", title: "T", status: "done" });
+    applyFlatProgressToTrees(trees, flat);
+    expect(trees[0].tasks.safe__t.status).toBe("done");
+    expect(Object.prototype.hasOwnProperty.call(trees[0].tasks, "__proto__")).toBe(
+      false
+    );
   });
 });
 
