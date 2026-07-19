@@ -44,11 +44,24 @@ import {
   mergeTreePreserveProgress,
   namespaceTaskIds,
   projectStateFromForest,
-  sanitizeLoadedTreeBundle,
   syncMetaTrees,
 } from "./forest";
+import {
+  loadTreeBundlesFromTexts,
+  PromanFileProblem,
+  tryParsePromanJson,
+} from "./promanConflict";
 
 const PROMAN_DIR = ".proman";
+/** Cap user-facing task titles (webview / tree safety). */
+const MAX_TASK_TITLE_LEN = 500;
+
+function clampTaskTitle(title: string): string {
+  const trimmed = title.trim() || "New task";
+  return trimmed.length > MAX_TASK_TITLE_LEN
+    ? trimmed.slice(0, MAX_TASK_TITLE_LEN)
+    : trimmed;
+}
 
 export interface AssignmentEvent {
   taskId: string;
@@ -89,6 +102,13 @@ export class ProjectStore {
   private lastLocalMutationMs = 0;
   /** Optional: suppress file watcher while we write .proman/ */
   onBeforeWriteDisk?: () => void;
+  /**
+   * Problems from the last `load()` (conflict markers / invalid JSON under `.proman/`).
+   * Cleared at the start of each load. Paths are relative to `.proman/`.
+   */
+  lastLoadProblems: PromanFileProblem[] = [];
+  /** Serialize disk writes so overlapping save() calls cannot reorder. */
+  private saveChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -191,6 +211,7 @@ export class ProjectStore {
 
   async load(): Promise<ProjectState | null> {
     const folder = this.folder;
+    this.lastLoadProblems = [];
     if (!folder) {
       this.log("load: no workspace folder");
       this.state = null;
@@ -207,7 +228,16 @@ export class ProjectStore {
         this.onDidChangeEmitter.fire(null);
         return null;
       }
-      const meta = normalizeProjectMeta(JSON.parse(metaText) as ProjectMeta);
+      const metaParsed = tryParsePromanJson(metaText);
+      if (!metaParsed.ok) {
+        // Fail-closed: cannot trust project without meta.
+        this.lastLoadProblems.push({ path: "project.json", kind: metaParsed.kind });
+        this.log(`load: project.json ${metaParsed.kind}`);
+        this.state = null;
+        this.onDidChangeEmitter.fire(null);
+        return null;
+      }
+      const meta = normalizeProjectMeta(metaParsed.data as ProjectMeta);
 
       const dirEntries = await wsReadDir(root, PROMAN_DIR, "trees");
       const treeFiles =
@@ -218,34 +248,42 @@ export class ProjectStore {
       let trees: TreeBundle[] | null = null;
 
       if (treeFiles.length > 0) {
-        trees = [];
+        const entries: { fileName: string; text: string }[] = [];
         for (const [name] of treeFiles) {
           const text = await wsReadText(root, PROMAN_DIR, "trees", name);
           if (!text) continue;
-          try {
-            const bundle = sanitizeLoadedTreeBundle(JSON.parse(text), name);
-            if (bundle) trees.push(bundle);
-            else this.log(`load: skipped unsafe tree file ${name}`);
-          } catch {
-            this.log(`load: skipped corrupt tree file ${name}`);
-          }
+          entries.push({ fileName: name, text });
         }
-        if (!trees.length) trees = null;
+        const loaded = loadTreeBundlesFromTexts(entries);
+        this.lastLoadProblems.push(...loaded.problems);
+        for (const p of loaded.problems) {
+          this.log(`load: ${p.kind} ${p.path}`);
+        }
+        trees = loaded.trees.length ? loaded.trees : null;
       } else {
         const treeText = await wsReadText(root, PROMAN_DIR, "tree.json");
         if (treeText) {
-          const tree = JSON.parse(treeText) as {
-            roots: string[];
-            tasks: Record<string, TaskNode>;
-          };
-          let edges: DependencyEdge[] = [];
-          const edgesText = await wsReadText(root, PROMAN_DIR, "edges.json");
-          if (edgesText) {
-            edges = JSON.parse(edgesText) as DependencyEdge[];
+          const treeParsed = tryParsePromanJson(treeText);
+          if (!treeParsed.ok) {
+            this.lastLoadProblems.push({ path: "tree.json", kind: treeParsed.kind });
+            this.log(`load: tree.json ${treeParsed.kind}`);
           } else {
-            edges = edgesFromTasks(tree.tasks ?? {});
+            const tree = treeParsed.data as {
+              roots: string[];
+              tasks: Record<string, TaskNode>;
+            };
+            let edges: DependencyEdge[] = [];
+            const edgesText = await wsReadText(root, PROMAN_DIR, "edges.json");
+            if (edgesText) {
+              const edgesParsed = tryParsePromanJson(edgesText);
+              if (edgesParsed.ok) {
+                edges = edgesParsed.data as DependencyEdge[];
+              }
+            } else {
+              edges = edgesFromTasks(tree.tasks ?? {});
+            }
+            trees = legacyToForest(meta, tree.roots ?? [], tree.tasks ?? {}, edges);
           }
-          trees = legacyToForest(meta, tree.roots ?? [], tree.tasks ?? {}, edges);
         }
       }
 
@@ -257,21 +295,29 @@ export class ProjectStore {
       }
 
       // Heal forest from flat tree.json (MCP may update only the snapshot).
+      // Never heal-write when flat or any tree file had conflict/corrupt problems.
       const flatText = await wsReadText(root, PROMAN_DIR, "tree.json");
       let healed = false;
+      let flatOk = true;
       if (flatText) {
-        try {
-          const flat = JSON.parse(flatText) as { tasks?: Record<string, TaskNode> };
+        const flatParsed = tryParsePromanJson(flatText);
+        if (!flatParsed.ok) {
+          flatOk = false;
+          if (!this.lastLoadProblems.some((p) => p.path === "tree.json")) {
+            this.lastLoadProblems.push({ path: "tree.json", kind: flatParsed.kind });
+          }
+          this.log(`load: skip heal — tree.json ${flatParsed.kind}`);
+        } else {
+          const flat = flatParsed.data as { tasks?: Record<string, TaskNode> };
           healed = applyFlatProgressToTrees(trees, flat.tasks);
-        } catch {
-          /* ignore corrupt flat */
         }
       }
 
       this.state = projectStateFromForest(meta, trees);
       this.lastLocalMutationMs = Date.now();
 
-      if (healed) {
+      const hasTreeProblems = this.lastLoadProblems.some((p) => p.path.startsWith("trees/"));
+      if (healed && flatOk && !hasTreeProblems) {
         this.log("load: healed trees/* from tree.json progress");
         try {
           this.onBeforeWriteDisk?.();
@@ -313,7 +359,10 @@ export class ProjectStore {
       }
       this.snapshotAssignees();
       this.log(
-        `load: ok trees=${this.state.trees.length} roots=${this.state.roots.length} tasks=${Object.keys(this.state.tasks).length}`
+        `load: ok trees=${this.state.trees.length} roots=${this.state.roots.length} tasks=${Object.keys(this.state.tasks).length}` +
+          (this.lastLoadProblems.length
+            ? ` problems=${this.lastLoadProblems.length}`
+            : "")
       );
       this.onDidChangeEmitter.fire(this.state);
       return this.state;
@@ -340,6 +389,16 @@ export class ProjectStore {
   }
 
   async save(): Promise<void> {
+    const next = this.saveChain.then(() => this.saveUnlocked());
+    // Keep the chain alive even if a save fails so later writes still run.
+    this.saveChain = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
+  }
+
+  private async saveUnlocked(): Promise<void> {
     const folder = this.folder;
     if (!this.state || !folder) {
       if (this.state && !folder) {
@@ -576,7 +635,15 @@ export class ProjectStore {
       !this.state.meta.activeTreeId ||
       !this.state.trees.some((t) => t.id === this.state!.meta.activeTreeId)
     ) {
-      this.state.meta.activeTreeId = this.state.trees[0].id;
+      const first = this.state.trees[0];
+      if (!first) {
+        const bundle = emptyTreeBundle(LEGACY_TREE_ID, this.state.meta.name || "Main");
+        this.state.trees.push(bundle);
+        this.state.meta.activeTreeId = bundle.id;
+        this.rebuildFlat();
+        return bundle.id;
+      }
+      this.state.meta.activeTreeId = first.id;
     }
     return this.state.meta.activeTreeId!;
   }
@@ -620,7 +687,7 @@ export class ProjectStore {
     await this.save();
   }
 
-  progress(rootId?: string): TreeProgress {
+  progress(rootId?: string, treeId?: string): TreeProgress {
     const counts: TreeProgress = { done: 0, total: 0, inProgress: 0, blocked: 0, todo: 0 };
     if (!this.state) return counts;
     const visit = (id: string) => {
@@ -633,8 +700,14 @@ export class ProjectStore {
       else counts.todo++; // todo | new | needs_rework | error
       for (const c of t.children) visit(c);
     };
-    if (rootId) visit(rootId);
-    else for (const r of this.state.roots) visit(r);
+    if (rootId) {
+      visit(rootId);
+    } else if (treeId) {
+      const tree = findTree(this.state.trees, treeId);
+      if (tree) for (const r of tree.roots) visit(r);
+    } else {
+      for (const r of this.state.roots) visit(r);
+    }
     return counts;
   }
 
@@ -657,7 +730,7 @@ export class ProjectStore {
     const hasExisting = Object.keys(tree.tasks).length > 0;
     const task: TaskNode = {
       id: newId(),
-      title: title.trim() || "New task",
+      title: clampTaskTitle(title),
       description: opts?.description ?? "",
       status: opts?.status ?? (hasExisting ? "new" : "todo"),
       children: [],
@@ -709,6 +782,9 @@ export class ProjectStore {
     const prevStatus = task.status;
     const prevAssignee = task.assignee;
 
+    if (patch.title !== undefined) {
+      patch = { ...patch, title: clampTaskTitle(patch.title) };
+    }
     Object.assign(task, patch);
     if ("estimateSp" in patch && (patch.estimateSp === undefined || patch.estimateSp === null)) {
       delete task.estimateSp;
@@ -862,9 +938,10 @@ export class ProjectStore {
       // Fallback: mutate flat then sync
       const oldParent = this.findParent(taskId);
       if (oldParent) {
-        this.state.tasks[oldParent].children = this.state.tasks[oldParent].children.filter(
-          (id) => id !== taskId
-        );
+        const parent = this.state.tasks[oldParent];
+        if (parent) {
+          parent.children = parent.children.filter((id) => id !== taskId);
+        }
       } else {
         this.state.roots = this.state.roots.filter((id) => id !== taskId);
       }
@@ -886,7 +963,10 @@ export class ProjectStore {
 
     const oldParent = Object.entries(tree.tasks).find(([, t]) => t.children.includes(taskId))?.[0];
     if (oldParent) {
-      tree.tasks[oldParent].children = tree.tasks[oldParent].children.filter((id) => id !== taskId);
+      const parentNode = tree.tasks[oldParent];
+      if (parentNode) {
+        parentNode.children = parentNode.children.filter((id) => id !== taskId);
+      }
     } else {
       tree.roots = tree.roots.filter((id) => id !== taskId);
     }
@@ -1061,8 +1141,9 @@ export class ProjectStore {
     if (!tree) throw new Error(`Tree ${treeId} not found`);
 
     for (const node of nodes) {
-      const exists = Boolean(tree.tasks[node.id] || this.state.tasks[node.id]);
-      let status = node.status ?? (exists ? (tree.tasks[node.id] ?? this.state.tasks[node.id]).status : "new");
+      const existing = tree.tasks[node.id] ?? this.state.tasks[node.id];
+      const exists = Boolean(existing);
+      let status = node.status ?? (existing ? existing.status : "new");
       if (!exists && (!node.status || node.status === "todo")) {
         status = "new";
       }

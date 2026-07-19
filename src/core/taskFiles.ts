@@ -159,6 +159,7 @@ export function resolveTaskFilePath(
   relPath: string
 ): string | null {
   const files = sanitizeTaskFiles(workspaceRoot, [relPath]);
-  if (!files.length) return null;
-  return resolveInside(workspaceRoot, ...files[0].path.split("/").filter(Boolean));
+  const first = files[0];
+  if (!first) return null;
+  return resolveInside(workspaceRoot, ...first.path.split("/").filter(Boolean));
 }

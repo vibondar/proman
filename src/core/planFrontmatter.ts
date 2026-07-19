@@ -18,12 +18,16 @@ export function extractFrontmatter(content: string): {
     return { meta: {}, body: content };
   }
   const meta: Record<string, string> = {};
-  for (const line of match[1].split(/\r?\n/)) {
+  const block = match[1];
+  if (!block) {
+    return { meta: {}, body: content.slice(match[0].length) };
+  }
+  for (const line of block.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const kv = trimmed.match(/^([\w-]+)\s*:\s*(.*)$/);
-    if (!kv) continue;
-    let value = kv[2].trim();
+    if (!kv?.[1]) continue;
+    let value = (kv[2] ?? "").trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))

@@ -68,7 +68,12 @@ function descriptionBlock(
   extras.push(...dependsLines(task, tasks));
 
   const combined = [...extras, ...(body ? body.split(/\r?\n/) : [])].filter(
-    (l, i, arr) => l.trim() !== "" || (i > 0 && arr[i - 1].trim() !== "")
+    (l, i, arr) => {
+      if (l.trim() !== "") return true;
+      if (i === 0) return false;
+      const prev = arr[i - 1];
+      return prev !== undefined && prev.trim() !== "";
+    }
   );
   if (!combined.length) return [];
   return combined.map((line) => (line.trim() === "" ? "" : `${indent}${line}`));
@@ -121,8 +126,9 @@ export function exportTreeToMarkdown(tree: TreeBundle): string {
 /** Apply `Status: …` lines from description (used by MD import). */
 export function applyStatusFromDescription(task: TaskNode): void {
   const m = (task.description || "").match(/(?:^|\n)\s*Status:\s*([a-z_]+)\s*(?:\n|$)/i);
-  if (!m) return;
-  const raw = m[1].toLowerCase() as TaskStatus;
+  const statusRaw = m?.[1];
+  if (!statusRaw) return;
+  const raw = statusRaw.toLowerCase() as TaskStatus;
   if (!(TASK_STATUSES as string[]).includes(raw)) return;
   // Checkbox `[x]` wins over a conflicting Status line.
   if (task.status === "done" && raw !== "done") return;

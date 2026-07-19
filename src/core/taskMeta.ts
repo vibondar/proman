@@ -15,18 +15,22 @@ export function parseTaskMeta(description: string): TaskMeta {
   const meta: TaskMeta = {};
 
   const estLine = description.match(/(?:^|\n)\s*(?:Оценка|Estimate)\s*:\s*([^\n]+)/i);
-  if (estLine) {
-    const sp = estLine[1].match(/(\d+(?:\.\d+)?)\s*SP\b/i);
-    if (sp) meta.estimateSp = Number(sp[1]);
-    const hours = estLine[1].match(
+  const estText = estLine?.[1];
+  if (estText) {
+    const sp = estText.match(/(\d+(?:\.\d+)?)\s*SP\b/i);
+    if (sp?.[1]) meta.estimateSp = Number(sp[1]);
+    const hours = estText.match(
       /(\d+(?:\.\d+)?)\s*(?:часа|часов|час|ч\.?|hours?|h)(?=\s|$|\/|,)/i
     );
-    if (hours) meta.estimateHours = Number(hours[1]);
+    if (hours?.[1]) meta.estimateHours = Number(hours[1]);
   }
 
   const tagsLine = description.match(/(?:^|\n)\s*(?:Теги|Tags)\s*:\s*([^\n]+)/i);
-  if (tagsLine) {
-    const tags = [...tagsLine[1].matchAll(/#([\w-]+)/g)].map((m) => m[1].toLowerCase());
+  const tagsText = tagsLine?.[1];
+  if (tagsText) {
+    const tags = [...tagsText.matchAll(/#([\w-]+)/g)]
+      .map((m) => m[1]?.toLowerCase())
+      .filter((t): t is string => Boolean(t));
     if (tags.length) meta.tags = [...new Set(tags)];
   }
 
@@ -34,9 +38,10 @@ export function parseTaskMeta(description: string): TaskMeta {
   const testPaths: string[] = [];
   for (const line of description.split(/\r?\n/)) {
     const code = line.match(/^\s*(?:Код|Code)\s*:\s*(.+)$/i);
-    if (code) {
+    const codeText = code?.[1];
+    if (codeText) {
       codePaths.push(
-        ...code[1]
+        ...codeText
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
@@ -44,9 +49,10 @@ export function parseTaskMeta(description: string): TaskMeta {
       continue;
     }
     const tests = line.match(/^\s*(?:Тесты|Tests)\s*:\s*(.+)$/i);
-    if (tests) {
+    const testsText = tests?.[1];
+    if (testsText) {
       testPaths.push(
-        ...tests[1]
+        ...testsText
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
@@ -59,8 +65,9 @@ export function parseTaskMeta(description: string): TaskMeta {
   const assignee = description.match(
     /(?:^|\n)\s*(?:Assignee|Исполнитель|Ответственный)\s*:\s*@?([^\n]+)/i
   );
-  if (assignee) {
-    meta.assignee = assignee[1].trim().replace(/^@/, "");
+  const assigneeText = assignee?.[1];
+  if (assigneeText) {
+    meta.assignee = assigneeText.trim().replace(/^@/, "");
   }
 
   return meta;

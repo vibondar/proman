@@ -265,11 +265,11 @@ export async function syncClosedGithubIssues(
   if (!linked.length) return 0;
 
   const interactive = opts?.interactive !== false;
-  const token = await authToken(store, { createIfNone: interactive });
-  if (!token) return 0;
-
   let updated = 0;
   try {
+    const token = await authToken(store, { createIfNone: interactive });
+    if (!token) return 0;
+
     const closed = await listClosedIssues(token, gh!.owner, gh!.repo, { perPage: 100 });
     const closedSet = new Set(closed.filter((i) => i.state === "closed").map((i) => i.number));
 

@@ -123,9 +123,9 @@ Removing a section: **Delete Task Tree** — warns that progress in that tree **
 
 ### Agent / Drive Mode
 
-- **Run in Agent** — status `in_progress`, prompt under `.proman/prompts/`, opens Agent with the prompt **pasted** into the input (you press Enter); via MCP the agent writes statuses and, on `done`, a `files` list
+- **Run in Agent** — prompt with `PROMAN_TASK_RUN:<taskId>` under `.proman/prompts/`, opens Agent with the prompt **pasted** (you press Enter); `in_progress` (spinner) is set by the agent via MCP **only if the marker is still in the message**; on `done`, a `files` list
 - **Add subtask** / **Delete** in task details use IDE dialogs (webview `prompt`/`confirm` are unavailable)
-- **Drive Mode** — agent walks the queue via MCP `proman_*`
+- **Drive Mode** — select the tree **section header** (not the first epic/task node) and start Drive: the agent walks that tree’s queue via MCP `proman_*`, starting from the first actionable task
 - Tree structure changes only after your **Approve**
 - On activation, writes `.cursor/mcp.json` (`proman` server); after install, **enable** it in Settings → MCP and restart MCP / Reload Window
 - Do not edit `.proman/*.json` by hand — use UI / MCP tools only
@@ -159,6 +159,23 @@ In `project.json`:
 - Auto-commit of `.proman/` on status change (`proman: @alice todo → done: …`)
 - Commands: `Enable Git Sync`, `Configure Git Sync`
 - Push after auto-commit always requires confirmation
+
+#### Team Git sync · merge
+
+Source of truth for the team backlog is the `.proman/` files in git (`project.json`, `trees/*.json`, …). Branch merging is ordinary **git merge / rebase**. Semantic JSON merge by `task.id` is available only via the manual **Resolve Proman Merge** command (see below).
+
+- **Auto-commit** only touches `.proman/` (statuses / tree), not the rest of the repo.
+- **Pull** changes the whole workspace (not only `.proman/`) — same as the warning before `git pull`.
+- On **conflict markers** or invalid JSON under `.proman/` after Pull / Reload / startup, Proman shows a warning with paths and actions **Open file** / **Reload** / **Source Control**. Valid `trees/*.json` sections still load; conflicted files are **not** overwritten by heal-from-disk.
+- If `git pull` fails with **CONFLICT**, the error is kept and a hint points to resolving markers (often under `.proman/`), then Reload.
+- **Advanced:** command `Proman: Resolve Proman Merge` — semantic merge of two valid section JSON snapshots by `task.id` (optional base for deletes). Never runs automatically on pull. Rules: `docs/adr/semantic-tree-merge.md`.
+
+**Team workflow** (fewer CONFLICT in `trees/*.json`):
+
+1. **Pull before** changing statuses or importing MD.
+2. **Short status commits**; do not mix code refactors with a mass tree rewrite in one commit unless necessary.
+3. Prefer **one owner** of an active section (`trees/<slug>.json`) per sprint.
+4. On **CONFLICT**: resolve markers in git → Reload; do not leave `<<<<<<<` in JSON.
 
 ### Stage 2 — GitHub Issues
 
@@ -195,6 +212,7 @@ In `project.json`:
 | Proman: Agent Drive Tree | Drive Mode |
 | Proman: Run Task in Agent | Prompt + open Agent |
 | Proman: Git Pull / Push | Sync `.proman/` |
+| Proman: Resolve Proman Merge | Advanced: semantic merge of two section JSON snapshots |
 | Proman: Enable Git Sync | Git backend |
 | Proman: Enable GitHub Issues | Issues bridge |
 | Proman: Sync Closed GitHub Issues | closed → done |

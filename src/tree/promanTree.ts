@@ -32,7 +32,8 @@ export type HighlightRole = "match" | "path" | "none";
 
 const PATH_COLOR = "charts.orange";
 const MATCH_COLOR = "list.highlightForeground";
-const EPIC_SP_COLOR = "charts.blue";
+/** Σ badge only — must not reuse status colors (new = charts.blue). */
+const EPIC_SP_BADGE = "Σ";
 
 function formatSpLabel(task: TaskNode, rollupSp: number): string | undefined {
   const isEpic = task.children.length > 0;
@@ -118,9 +119,7 @@ export class PromanTreeItem extends vscode.TreeItem {
         ? MATCH_COLOR
         : highlight === "path"
           ? PATH_COLOR
-          : isEpicSp
-            ? EPIC_SP_COLOR
-            : STATUS_COLOR[task.status];
+          : STATUS_COLOR[task.status];
     this.iconPath = iconColor
       ? new vscode.ThemeIcon(STATUS_ICON[task.status], new vscode.ThemeColor(iconColor))
       : new vscode.ThemeIcon(STATUS_ICON[task.status] ?? "circle-outline");
@@ -366,7 +365,7 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanNode> {
       const tasks = tree?.tasks ?? state.tasks;
       return roots
         .map((id) => tasks[id] ?? state.tasks[id])
-        .filter(Boolean)
+        .filter((task): task is NonNullable<typeof task> => Boolean(task))
         .filter((task) => !this.visibleIds || this.visibleIds.has(task.id))
         .map((task) => {
           const filteredChildren = task.children.filter(
@@ -383,7 +382,7 @@ export class PromanTreeProvider implements vscode.TreeDataProvider<PromanNode> {
     const task = element.task;
     return task.children
       .map((id) => state.tasks[id])
-      .filter(Boolean)
+      .filter((t): t is NonNullable<typeof t> => Boolean(t))
       .filter((t) => !this.visibleIds || this.visibleIds.has(t.id))
       .map((t) => {
         const filteredChildren = t.children.filter(
@@ -479,9 +478,10 @@ export class PromanDecorationProvider implements vscode.FileDecorationProvider {
       };
     }
     if (isEpic) {
+      const colorId = STATUS_COLOR[status];
       return {
-        badge: "Σ",
-        color: new vscode.ThemeColor(EPIC_SP_COLOR),
+        badge: EPIC_SP_BADGE,
+        color: colorId ? new vscode.ThemeColor(colorId) : undefined,
         tooltip: t("Sum of SP for child tasks"),
         propagate: false,
       };

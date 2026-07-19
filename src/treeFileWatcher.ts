@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { ProjectStore } from "./core/store";
 
+export type TreeFileWatcher = vscode.Disposable & { markSelfWrite: () => void };
+
 /**
  * Watch .proman/tree.json and .proman/trees/*.json so Agent MCP status writes
  * refresh the sidebar automatically.
@@ -9,7 +11,7 @@ import { ProjectStore } from "./core/store";
 export function startTreeFileWatcher(
   store: ProjectStore,
   onReload: () => void
-): vscode.Disposable {
+): TreeFileWatcher {
   let watchers: vscode.FileSystemWatcher[] = [];
   let timer: NodeJS.Timeout | undefined;
   let ignoreUntil = 0;
@@ -65,5 +67,5 @@ export function startTreeFileWatcher(
       if (timer) clearTimeout(timer);
     },
     markSelfWrite,
-  } as vscode.Disposable & { markSelfWrite: () => void };
+  };
 }

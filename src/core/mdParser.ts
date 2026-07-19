@@ -22,7 +22,7 @@ export interface ParseMarkdownOptions {
 
 function statusFromCheckbox(line: string): TaskStatus | null {
   const m = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
-  if (!m) return null;
+  if (!m?.[1]) return null;
   return m[1].toLowerCase() === "x" ? "done" : "todo";
 }
 
@@ -40,7 +40,8 @@ function parseDepends(text: string): string[] {
   for (const re of patterns) {
     let m: RegExpExecArray | null;
     while ((m = re.exec(text))) {
-      refs.push(m[1].trim());
+      const ref = m[1]?.trim();
+      if (ref) refs.push(ref);
     }
   }
   return refs;
@@ -95,13 +96,18 @@ export function parseMarkdownToTree(
     tasks[id] = task;
     titleToId.set(title.toLowerCase(), id);
 
-    while (stack.length && stack[stack.length - 1].level >= level) {
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      if (!top || top.level < level) break;
       stack.pop();
     }
-    if (stack.length === 0) {
+    const parent = stack[stack.length - 1];
+    if (!parent) {
       roots.push(id);
     } else {
-      tasks[stack[stack.length - 1].id].children.push(id);
+      const parentTask = tasks[parent.id];
+      if (parentTask) parentTask.children.push(id);
+      else roots.push(id);
     }
     stack.push({ level, id, kind });
     return id;
@@ -109,7 +115,8 @@ export function parseMarkdownToTree(
 
   const currentHeadingLevel = (): number => {
     for (let i = stack.length - 1; i >= 0; i--) {
-      if (stack[i].kind === "heading") return stack[i].level;
+      const frame = stack[i];
+      if (frame?.kind === "heading") return frame.level;
     }
     return 0;
   };
@@ -124,12 +131,15 @@ export function parseMarkdownToTree(
     }
     const text = pendingDesc.join("\n").trim();
     if (text) {
-      tasks[id].description = [tasks[id].description, text].filter(Boolean).join("\n");
+      const task = tasks[id];
+      if (!task) {
+        pendingDesc = [];
+        return;
+      }
+      task.description = [task.description, text].filter(Boolean).join("\n");
       for (const ref of parseDepends(text)) {
-        (tasks[id] as TaskNode & { _depTitles?: string[] })._depTitles = [
-          ...((tasks[id] as TaskNode & { _depTitles?: string[] })._depTitles ?? []),
-          ref,
-        ];
+        const withDeps = task as TaskNode & { _depTitles?: string[] };
+        withDeps._depTitles = [...(withDeps._depTitles ?? []), ref];
       }
     }
     pendingDesc = [];
@@ -139,7 +149,7 @@ export function parseMarkdownToTree(
 
   for (const line of lines) {
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) {
+    if (heading?.[1] && heading[2] !== undefined) {
       flushDesc(lastId);
       const level = heading[1].length;
       const title = heading[2].trim();

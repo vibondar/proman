@@ -144,6 +144,7 @@ describe("AgentHandoff.buildTaskPrompt", () => {
     const store = { current: state } as unknown as ProjectStore;
     const handoff = new AgentHandoff(store, new DependencyEngine());
     const prompt = handoff.buildTaskPrompt("t1");
+    expect(prompt).toContain("PROMAN_TASK_RUN:t1");
     expect(prompt).toContain("t1");
     expect(prompt).toContain("Implement auth");
     expect(prompt).toContain("Wire login");
@@ -151,6 +152,7 @@ describe("AgentHandoff.buildTaskPrompt", () => {
     expect(prompt).toContain("proman_get_task");
     expect(prompt).toContain("files");
     expect(prompt).toContain("Sub");
+    expect(prompt).toMatch(/Gate:/);
   });
 
   it("throws for unknown task", () => {

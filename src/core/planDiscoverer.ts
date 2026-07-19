@@ -9,6 +9,13 @@ import { t } from "../i18n";
 import * as path from "path";
 import * as vscode from "vscode";
 
+/** Reject oversized planning docs (DoS / memory). */
+export const MAX_MD_IMPORT_BYTES = 2 * 1024 * 1024;
+
+export function isMdImportTooLarge(byteLength: number): boolean {
+  return byteLength > MAX_MD_IMPORT_BYTES;
+}
+
 const GLOB_PATTERNS = [
   "**/ROADMAP.md",
   "**/TODO.md",
@@ -26,6 +33,18 @@ export interface DiscoverCandidate {
   description: string;
   uris: vscode.Uri[];
   directory?: vscode.Uri;
+}
+
+async function readMdForImport(
+  uri: vscode.Uri
+): Promise<{ data: Uint8Array } | { skipped: "large" | "error" }> {
+  try {
+    const st = await vscode.workspace.fs.stat(uri);
+    if (isMdImportTooLarge(st.size)) return { skipped: "large" };
+    return { data: await vscode.workspace.fs.readFile(uri) };
+  } catch {
+    return { skipped: "error" };
+  }
 }
 
 export class PlanDiscoverer {
@@ -106,8 +125,9 @@ export class PlanDiscoverer {
     const out: vscode.Uri[] = [];
     for (const uri of uris) {
       try {
-        const raw = await vscode.workspace.fs.readFile(uri);
-        const text = Buffer.from(raw).toString("utf8");
+        const raw = await readMdForImport(uri);
+        if ("skipped" in raw) continue;
+        const text = Buffer.from(raw.data).toString("utf8");
         // Cheap reject before full parse
         if (!text.startsWith("---")) continue;
         if (!isPlanDocument(text)) continue;
@@ -133,9 +153,17 @@ export class MdImporter {
 
     let totalTasks = 0;
     let planCounter = 1;
+    let skippedLarge = 0;
+    let firstImported = true;
     for (let i = 0; i < uris.length; i++) {
       const uri = uris[i];
-      const raw = await vscode.workspace.fs.readFile(uri);
+      if (!uri) continue;
+      const loaded = await readMdForImport(uri);
+      if ("skipped" in loaded) {
+        if (loaded.skipped === "large") skippedLarge++;
+        continue;
+      }
+      const raw = loaded.data;
       const text = Buffer.from(raw).toString("utf8");
       const rel = vscode.workspace.asRelativePath(uri);
       const parsed = parseMarkdownToTree(text, rel, {
@@ -168,10 +196,20 @@ export class MdImporter {
         sourceFile: rel,
         roots: parsed.roots,
         tasks: parsed.tasks,
-        // Keep planningDir on first call (directory import sets it once)
-        planningDir: i === 0 ? planningDir : undefined,
+        // Set planningDir only for the first successfully imported file in this batch
+        planningDir: firstImported ? planningDir : undefined,
       });
+      firstImported = false;
       totalTasks += Object.keys(parsed.tasks).length;
+    }
+    if (skippedLarge > 0) {
+      void vscode.window.showWarningMessage(
+        t(
+          "Proman: skipped {0} markdown file(s) larger than {1} MB",
+          skippedLarge,
+          String(MAX_MD_IMPORT_BYTES / (1024 * 1024))
+        )
+      );
     }
     this.store.applyBlockedStatuses();
     await this.store.save();
@@ -188,8 +226,9 @@ export class MdImporter {
     const planFiles: vscode.Uri[] = [];
     for (const uri of files) {
       try {
-        const raw = await vscode.workspace.fs.readFile(uri);
-        if (isPlanDocument(Buffer.from(raw).toString("utf8"))) planFiles.push(uri);
+        const loaded = await readMdForImport(uri);
+        if ("skipped" in loaded) continue;
+        if (isPlanDocument(Buffer.from(loaded.data).toString("utf8"))) planFiles.push(uri);
       } catch {
         /* skip */
       }

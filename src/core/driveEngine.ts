@@ -1,4 +1,4 @@
-import { TaskNode, TaskStatus, ProjectState, TreeBundle } from "../core/types";
+import { TaskNode, TaskStatus, ProjectState, TreeBundle, ProjectMeta, DependencyEdge } from "../core/types";
 import { isSafeId, resolveTreeJsonPath } from "./pathSafety";
 import { parseStructureOps, StructureOp } from "./proposalOps";
 import {
@@ -15,59 +15,98 @@ import {
   legacyToForest,
   projectStateFromForest,
   pullFlatIntoForest,
-  sanitizeLoadedTreeBundle,
   syncMetaTrees,
   applyFlatProgressToTrees,
 } from "./forest";
 import { normalizeProjectMeta } from "./projectMeta";
+import {
+  loadTreeBundlesFromTexts,
+  PromanFileProblem,
+  tryParsePromanJson,
+} from "./promanConflict";
 
 const PROMAN = ".proman";
 
-export async function loadProjectState(workspaceRoot: string): Promise<ProjectState | null> {
+export interface LoadProjectResult {
+  state: ProjectState | null;
+  /** Paths relative to `.proman/`. */
+  problems: PromanFileProblem[];
+}
+
+export async function loadProjectStateWithProblems(
+  workspaceRoot: string
+): Promise<LoadProjectResult> {
+  const problems: PromanFileProblem[] = [];
   const metaText = await wsReadText(workspaceRoot, PROMAN, "project.json");
-  if (!metaText) return null;
-  const meta = normalizeProjectMeta(JSON.parse(metaText));
+  if (!metaText) return { state: null, problems };
+
+  const metaParsed = tryParsePromanJson(metaText);
+  if (!metaParsed.ok) {
+    problems.push({ path: "project.json", kind: metaParsed.kind });
+    return { state: null, problems };
+  }
+  const meta = normalizeProjectMeta(metaParsed.data as ProjectMeta);
 
   const trees: TreeBundle[] = [];
   const dir = await wsReadDir(workspaceRoot, PROMAN, "trees");
   if (dir) {
+    const entries: { fileName: string; text: string }[] = [];
     for (const [name, type] of dir) {
       if ((type as number) !== 1) continue; // File
       if (!name.endsWith(".json")) continue;
       const text = await wsReadText(workspaceRoot, PROMAN, "trees", name);
       if (!text) continue;
-      try {
-        const bundle = sanitizeLoadedTreeBundle(JSON.parse(text), name);
-        if (bundle) trees.push(bundle);
-      } catch {
-        /* skip */
-      }
+      entries.push({ fileName: name, text });
     }
+    const loaded = loadTreeBundlesFromTexts(entries);
+    problems.push(...loaded.problems);
+    trees.push(...loaded.trees);
   }
 
   if (trees.length) {
     const treeText = await wsReadText(workspaceRoot, PROMAN, "tree.json");
     if (treeText) {
-      try {
-        const flat = JSON.parse(treeText) as { tasks?: Record<string, TaskNode> };
+      const flatParsed = tryParsePromanJson(treeText);
+      if (!flatParsed.ok) {
+        problems.push({ path: "tree.json", kind: flatParsed.kind });
+      } else {
+        const flat = flatParsed.data as { tasks?: Record<string, TaskNode> };
         applyFlatProgressToTrees(trees, flat.tasks);
-      } catch {
-        /* ignore */
       }
     }
-    return projectStateFromForest(meta, trees);
+    return { state: projectStateFromForest(meta, trees), problems };
   }
 
   const treeText = await wsReadText(workspaceRoot, PROMAN, "tree.json");
-  if (!treeText) return null;
-  const tree = JSON.parse(treeText);
-  let edges = [];
+  if (!treeText) return { state: null, problems };
+  const treeParsed = tryParsePromanJson(treeText);
+  if (!treeParsed.ok) {
+    problems.push({ path: "tree.json", kind: treeParsed.kind });
+    return { state: null, problems };
+  }
+  const tree = treeParsed.data as {
+    roots?: string[];
+    tasks?: Record<string, TaskNode>;
+  };
+  let edges: DependencyEdge[] = [];
   const edgesText = await wsReadText(workspaceRoot, PROMAN, "edges.json");
-  if (edgesText) edges = JSON.parse(edgesText);
-  return projectStateFromForest(
-    meta,
-    legacyToForest(meta, tree.roots ?? [], tree.tasks ?? {}, edges)
-  );
+  if (edgesText) {
+    const edgesParsed = tryParsePromanJson(edgesText);
+    if (edgesParsed.ok) edges = edgesParsed.data as DependencyEdge[];
+  } else {
+    edges = edgesFromTasks(tree.tasks ?? {});
+  }
+  return {
+    state: projectStateFromForest(
+      meta,
+      legacyToForest(meta, tree.roots ?? [], tree.tasks ?? {}, edges)
+    ),
+    problems,
+  };
+}
+
+export async function loadProjectState(workspaceRoot: string): Promise<ProjectState | null> {
+  return (await loadProjectStateWithProblems(workspaceRoot)).state;
 }
 
 export async function saveProjectState(workspaceRoot: string, state: ProjectState): Promise<void> {
@@ -134,15 +173,30 @@ export function applyBlocked(state: ProjectState): void {
   }
 }
 
-/** DFS order: first leaf-ish todo/in_progress that is not blocked by unmet deps */
-export function nextActionable(state: ProjectState): {
+/**
+ * DFS order: first leaf-ish todo/in_progress that is not blocked by unmet deps.
+ * When `treeId` is set, only walks that tree's roots (per-tree Drive).
+ */
+export function nextActionable(
+  state: ProjectState,
+  treeId?: string | null
+): {
   task: TaskNode | null;
   reason: string;
   queue: Array<{ id: string; title: string; status: TaskStatus }>;
+  treeId: string | null;
 } {
   const queue: Array<{ id: string; title: string; status: TaskStatus }> = [];
+  const resolvedTreeId =
+    treeId && state.trees.some((t) => t.id === treeId) ? treeId : null;
+  const tree = resolvedTreeId
+    ? state.trees.find((t) => t.id === resolvedTreeId)
+    : undefined;
+  const roots = tree ? tree.roots : state.roots;
+  const tasks = tree ? tree.tasks : state.tasks;
+
   const visit = (id: string) => {
-    const t = state.tasks[id];
+    const t = tasks[id] ?? state.tasks[id];
     if (!t) return;
     for (const c of t.children) visit(c);
     if (
@@ -151,38 +205,50 @@ export function nextActionable(state: ProjectState): {
       t.status === "in_progress" ||
       t.status === "needs_rework"
     ) {
-      const unmet = t.dependsOn.filter((d) => state.tasks[d]?.status !== "done");
+      const unmet = t.dependsOn.filter(
+        (d) => (state.tasks[d] ?? tasks[d])?.status !== "done"
+      );
       if (unmet.length === 0) {
         queue.push({ id: t.id, title: t.title, status: t.status });
       }
     }
   };
-  for (const r of state.roots) visit(r);
+  for (const r of roots) visit(r);
 
+  const scoped = resolvedTreeId;
   const inProg = queue.find((q) => q.status === "in_progress");
   if (inProg) {
     return {
-      task: state.tasks[inProg.id],
+      task: state.tasks[inProg.id] ?? null,
       reason: "Продолжить текущую in_progress",
       queue,
+      treeId: scoped,
     };
   }
   const rework = queue.find((q) => q.status === "needs_rework");
   if (rework) {
     return {
-      task: state.tasks[rework.id],
+      task: state.tasks[rework.id] ?? null,
       reason: "Доработка (needs_rework)",
       queue,
+      treeId: scoped,
     };
   }
   if (queue.length) {
+    const first = queue[0]!;
     return {
-      task: state.tasks[queue[0].id],
+      task: state.tasks[first.id] ?? null,
       reason: "Следующая разблокированная задача (снизу вверх)",
       queue,
+      treeId: scoped,
     };
   }
-  return { task: null, reason: "Нет разблокированных задач", queue };
+  return {
+    task: null,
+    reason: "Нет разблокированных задач",
+    queue,
+    treeId: scoped,
+  };
 }
 
 export interface StructureProposal {
@@ -246,8 +312,9 @@ export async function applyProposalToDisk(
   for (const op of parsed.ops) {
     if (op.op === "upsert") {
       for (const node of op.tasks) {
-        const exists = Boolean(state.tasks[node.id]);
-        let status = node.status ?? (exists ? state.tasks[node.id].status : "new");
+        const existing = state.tasks[node.id];
+        const exists = Boolean(existing);
+        let status = node.status ?? (existing ? existing.status : "new");
         if (!exists && (!node.status || node.status === "todo")) {
           status = "new";
         }
@@ -258,9 +325,10 @@ export async function applyProposalToDisk(
           dependsOn: node.dependsOn ?? [],
         };
         const parentId = op.parentId ?? null;
-        if (parentId && state.tasks[parentId]) {
-          if (!state.tasks[parentId].children.includes(node.id)) {
-            state.tasks[parentId].children.push(node.id);
+        const parentNode = parentId ? state.tasks[parentId] : undefined;
+        if (parentNode) {
+          if (!parentNode.children.includes(node.id)) {
+            parentNode.children.push(node.id);
           }
         } else if (!state.roots.includes(node.id)) {
           const hasParent = Object.values(state.tasks).some((t) =>
@@ -270,9 +338,11 @@ export async function applyProposalToDisk(
         }
       }
     } else if (op.op === "setStatus") {
-      if (state.tasks[op.taskId]) state.tasks[op.taskId].status = op.status;
+      const t = state.tasks[op.taskId];
+      if (t) t.status = op.status;
     } else if (op.op === "setDepends") {
-      if (state.tasks[op.taskId]) state.tasks[op.taskId].dependsOn = op.dependsOn;
+      const t = state.tasks[op.taskId];
+      if (t) t.dependsOn = op.dependsOn;
     } else if (op.op === "delete") {
       const task = state.tasks[op.taskId];
       if (!task) continue;
@@ -289,18 +359,21 @@ export async function applyProposalToDisk(
           delete state.tasks[id];
         }
         if (parent) {
-          state.tasks[parent].children = state.tasks[parent].children.filter(
-            (id) => id !== op.taskId
-          );
+          const parentNode = state.tasks[parent];
+          if (parentNode) {
+            parentNode.children = parentNode.children.filter((id) => id !== op.taskId);
+          }
         } else {
           state.roots = state.roots.filter((id) => id !== op.taskId);
         }
       } else {
         if (parent) {
           const p = state.tasks[parent];
-          const idx = p.children.indexOf(op.taskId);
-          if (idx >= 0) p.children.splice(idx, 1, ...task.children);
-          p.children = p.children.filter((id) => id !== op.taskId);
+          if (p) {
+            const idx = p.children.indexOf(op.taskId);
+            if (idx >= 0) p.children.splice(idx, 1, ...task.children);
+            p.children = p.children.filter((id) => id !== op.taskId);
+          }
         } else {
           const idx = state.roots.indexOf(op.taskId);
           if (idx >= 0) state.roots.splice(idx, 1, ...task.children);

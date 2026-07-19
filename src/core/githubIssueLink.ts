@@ -85,7 +85,7 @@ export function parseGithubRemoteUrl(url: string): { owner: string; repo: string
   if (!m) {
     m = cleaned.match(/https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)/i);
   }
-  if (!m) return null;
+  if (!m?.[1] || !m[2]) return null;
   try {
     return assertValidGithubOwnerRepo(m[1], m[2]);
   } catch {
