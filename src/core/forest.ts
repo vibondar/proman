@@ -148,24 +148,24 @@ export function mergeTreePreserveProgress(
 
   for (const [id, node] of Object.entries(incoming.tasks)) {
     const old = prev[id];
-    if (old) {
-      tasks[id] = enrichAllTasks({
-        [id]: {
-          ...node,
-          status: old.status,
-          assignee: old.assignee ?? node.assignee,
-          impactHint: old.impactHint ?? node.impactHint,
-          estimateSp: node.estimateSp ?? old.estimateSp,
-          estimateHours: node.estimateHours ?? old.estimateHours,
-          tags: node.tags?.length ? node.tags : old.tags,
-          code: node.code?.length ? node.code : old.code,
-          tests: node.tests?.length ? node.tests : old.tests,
-          changedFiles: old.changedFiles?.length ? old.changedFiles : node.changedFiles,
-        },
-      })[id];
-    } else {
-      tasks[id] = enrichAllTasks({ [id]: node })[id];
-    }
+    const enriched = old
+      ? enrichAllTasks({
+          [id]: {
+            ...node,
+            status: old.status,
+            assignee: old.assignee ?? node.assignee,
+            impactHint: old.impactHint ?? node.impactHint,
+            estimateSp: node.estimateSp ?? old.estimateSp,
+            estimateHours: node.estimateHours ?? old.estimateHours,
+            tags: node.tags?.length ? node.tags : old.tags,
+            code: node.code?.length ? node.code : old.code,
+            tests: node.tests?.length ? node.tests : old.tests,
+            changedFiles: old.changedFiles?.length ? old.changedFiles : node.changedFiles,
+          },
+        })[id]
+      : enrichAllTasks({ [id]: node })[id];
+    if (!enriched) continue;
+    tasks[id] = enriched;
   }
 
   for (const [id, old] of Object.entries(prev)) {
@@ -180,6 +180,7 @@ export function mergeTreePreserveProgress(
     const referenced = Object.values(tasks).some((t) => t.children.includes(id));
     if (!referenced && !roots.includes(id)) {
       const t = tasks[id];
+      if (!t) continue;
       if (t.source === "manual" || t.source?.startsWith("manual")) roots.push(id);
     }
   }
@@ -375,8 +376,9 @@ export function pullFlatIntoForest(state: ProjectState): void {
   for (const tree of byLen) {
     const nextTasks: Record<string, TaskNode> = {};
     for (const id of Object.keys(tree.tasks)) {
-      if (state.tasks[id] && !claimed.has(id)) {
-        nextTasks[id] = state.tasks[id];
+      const flat = state.tasks[id];
+      if (flat && !claimed.has(id)) {
+        nextTasks[id] = flat;
         claimed.add(id);
       }
     }
@@ -406,7 +408,9 @@ export function pullFlatIntoForest(state: ProjectState): void {
       state.trees.push(tree);
     }
     for (const id of orphans) {
-      tree.tasks[id] = state.tasks[id];
+      const orphan = state.tasks[id];
+      if (!orphan) continue;
+      tree.tasks[id] = orphan;
       claimed.add(id);
     }
     tree.roots = Object.keys(tree.tasks).filter(

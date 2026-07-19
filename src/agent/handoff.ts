@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { ProjectStore } from "../core/store";
 import { DependencyEngine } from "../core/dependencyEngine";
 import { t } from "../i18n";
+import { taskRunMarker } from "./runMarker";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -94,8 +95,12 @@ export class AgentHandoff {
       .map((node) => this.deps.describeRelation(state, taskId, node.id))
       .join("\n");
 
-    return t(
-      `# Proman: run task
+    const marker = taskRunMarker(task.id);
+
+    return (
+      `${marker}\n\n` +
+      t(
+        `# Proman: run task
 
 You are working in a project via the Proman extension. The task tree is the source of truth.
 
@@ -104,24 +109,26 @@ You are working in a project via the Proman extension. The task tree is the sour
 - **title:** {1}
 - **status:** {2}
 - **source:** {3}
+- **run marker:** \`{4}\` (must stay in the user message)
 
 ### Description
-{4}
-
-### Subtasks
 {5}
 
-### Depends on
+### Subtasks
 {6}
 
-### Blocks
+### Depends on
 {7}
 
-### Impact on related features
+### Blocks
 {8}
 
+### Impact on related features
+{9}
+
 ## Instructions
-1. If needed, first call MCP/command \`proman_get_task\` with taskId=\`{0}\` for an up-to-date snapshot.
+0. **Gate:** Only treat this as a Proman tree run if the user message still contains \`{4}\`. If that marker was removed or the message is unrelated — do **not** call \`proman_set_task_status\` / change tree statuses.
+1. First call \`proman_set_task_status\` with taskId=\`{0}\` and status=\`in_progress\` (this starts the tree spinner). Then \`proman_get_task\` for a snapshot.
 2. Implement code changes **only within this task**.
 3. Respect dependencies: do not break tasks listed under “Blocks”.
 4. When finished, call \`proman_set_task_status\` with one of:
@@ -133,15 +140,17 @@ You are working in a project via the Proman extension. The task tree is the sour
 
 Start with a brief plan, then edit the code.
 `,
-      task.id,
-      task.title,
-      task.status,
-      task.source,
-      task.description || none,
-      children || none,
-      blockers || none,
-      blocked || none,
-      relations || task.impactHint || t("(no explicit links)")
+        task.id,
+        task.title,
+        task.status,
+        task.source,
+        marker,
+        task.description || none,
+        children || none,
+        blockers || none,
+        blocked || none,
+        relations || task.impactHint || t("(no explicit links)")
+      )
     );
   }
 
@@ -192,15 +201,13 @@ TaskNode schema:`,
 
   /**
    * Run task in Agent:
-   * 1) mark in_progress
-   * 2) write prompt under .proman/prompts/
-   * 3) open Agent and paste prompt into the input (user sends with Enter)
-   * 4) agent uses MCP proman_* to update statuses when done
+   * 1) write prompt under .proman/prompts/ (with PROMAN_TASK_RUN marker)
+   * 2) open Agent and paste prompt (user sends with Enter)
+   * 3) agent sets in_progress via MCP only if the marker is still in the message
+   *    — that is what starts the tree spinner
    */
   async runTask(taskId: string): Promise<void> {
     await this.store.ensureInitialized();
-    this.store.setStatus(taskId, "in_progress");
-    await this.store.save();
 
     const prompt = this.buildTaskPrompt(taskId);
     const file = await this.savePrompt(taskId, prompt);
@@ -220,7 +227,9 @@ TaskNode schema:`,
       }
     } else {
       vscode.window.showInformationMessage(
-        t("Agent opened with the task prompt. Review and press Enter to send.")
+        t(
+          "Agent opened with the task prompt. Send it to start work (spinner after in_progress). If you delete the prompt, the tree stays unchanged."
+        )
       );
     }
   }

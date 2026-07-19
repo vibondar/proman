@@ -1,6 +1,6 @@
 {
   "proman.views.tree.name": "Project Tree",
-  "proman.viewsWelcome": "No tasks in the tree.\n[Import MD](command:proman.importPlanningDocs)\n[Add task](command:proman.addRootTask)\n[Agent drives the tree](command:proman.driveTree)\n\nClick — details. Right-click — subtask / delete / run one task in Agent.\nDrive Mode: the agent walks the queue and writes statuses; structure changes only after your Approve.",
+  "proman.viewsWelcome": "No tasks in the tree.\n[Import MD](command:proman.importPlanningDocs)\n[Add task](command:proman.addRootTask)\n[Agent drives the tree](command:proman.driveTree)\n\nClick — details. Right-click a section header — Drive Mode for that tree (from the first task).\nRight-click a task — subtask / delete / run one task in Agent.\nDrive Mode: the agent walks the queue and writes statuses; structure changes only after your Approve.",
   "proman.command.open.title": "Proman: Open",
   "proman.command.importPlanningDocs.title": "Proman: Import Planning Docs",
   "proman.command.setPlanningDirectory.title": "Proman: Set Planning Directory",
@@ -16,6 +16,7 @@
   "proman.command.assignTask.title": "Proman: Assign Task",
   "proman.command.gitPull.title": "Proman: Git Pull",
   "proman.command.gitPush.title": "Proman: Git Push",
+  "proman.command.resolveMerge.title": "Proman: Resolve Proman Merge",
   "proman.command.enableGitSync.title": "Proman: Enable Git Sync",
   "proman.command.configureGitSync.title": "Proman: Configure Git Sync",
   "proman.command.enableGithubIssues.title": "Proman: Enable GitHub Issues",

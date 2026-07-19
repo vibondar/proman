@@ -106,6 +106,7 @@ export async function runOnboarding(
   }
   if (choice.action === "candidate" && choice.index !== undefined) {
     const c = candidates[choice.index];
+    if (!c) return;
     const count = await importer.importUris(
       c.uris,
       c.directory ? vscode.workspace.asRelativePath(c.directory) : undefined

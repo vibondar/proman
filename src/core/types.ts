@@ -92,7 +92,7 @@ export interface SyncConfig {
   autoPush?: boolean;
 }
 
-/** GitHub Issues bridge (этап 2). Связь: строка «GitHub: #N» в description. */
+/** GitHub Issues bridge. Link format in description: `GitHub: #N`. */
 export interface GithubIssuesConfig {
   enabled: boolean;
   owner: string;

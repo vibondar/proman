@@ -105,6 +105,12 @@ export async function gitPull(cwd: string): Promise<GitResult> {
   return git(cwd, ["pull", "--autostash"]);
 }
 
+/** True when git output suggests an unresolved merge/rebase conflict. */
+export function looksLikeGitConflict(r: Pick<GitResult, "stdout" | "stderr" | "error">): boolean {
+  const blob = `${r.stdout ?? ""}\n${r.stderr ?? ""}\n${r.error ?? ""}`;
+  return /\bCONFLICT\b/i.test(blob) || /\bconflicts?\b/i.test(blob);
+}
+
 export async function gitPush(cwd: string): Promise<GitResult> {
   return git(cwd, ["push"]);
 }

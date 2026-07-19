@@ -106,6 +106,54 @@ describe("nextActionable", () => {
     const s = state({ a: task("a", { status: "done" }) }, ["a"]);
     expect(nextActionable(s).task).toBeNull();
   });
+
+  it("scopes queue to the given treeId", () => {
+    const treeA = {
+      id: "plan-a",
+      title: "A",
+      roots: ["a-root"],
+      tasks: {
+        "a-root": task("a-root", { children: ["a-leaf"] }),
+        "a-leaf": task("a-leaf", { status: "todo" }),
+      },
+      edges: [],
+      updatedAt: "",
+    };
+    const treeB = {
+      id: "plan-b",
+      title: "B",
+      roots: ["b-root"],
+      tasks: {
+        "b-root": task("b-root", { children: ["b-leaf"] }),
+        "b-leaf": task("b-leaf", { status: "todo" }),
+      },
+      edges: [],
+      updatedAt: "",
+    };
+    const s: ProjectState = {
+      meta: { name: "t", createdAt: "", updatedAt: "", activeTreeId: "plan-a" },
+      trees: [treeA, treeB],
+      roots: ["a-root", "b-root"],
+      tasks: { ...treeA.tasks, ...treeB.tasks },
+      edges: [],
+    };
+
+    const all = nextActionable(s);
+    expect(all.queue.map((q) => q.id)).toEqual(
+      expect.arrayContaining(["a-leaf", "b-leaf"])
+    );
+
+    const onlyA = nextActionable(s, "plan-a");
+    expect(onlyA.treeId).toBe("plan-a");
+    expect(onlyA.queue.map((q) => q.id)).toEqual(["a-leaf", "a-root"]);
+    expect(onlyA.queue.map((q) => q.id)).not.toContain("b-leaf");
+    expect(onlyA.task?.id).toBe("a-leaf");
+
+    const onlyB = nextActionable(s, "plan-b");
+    expect(onlyB.treeId).toBe("plan-b");
+    expect(onlyB.queue.map((q) => q.id)).toEqual(["b-leaf", "b-root"]);
+    expect(onlyB.queue.map((q) => q.id)).not.toContain("a-leaf");
+  });
 });
 
 describe("writeProposal", () => {

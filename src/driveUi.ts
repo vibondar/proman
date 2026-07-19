@@ -86,17 +86,27 @@ export function startProposalWatcher(
   };
 }
 
-export async function startDriveMode(mcp: PromanMcpServer): Promise<void> {
+export async function startDriveMode(
+  mcp: PromanMcpServer,
+  treeId?: string | null,
+  treeTitle?: string
+): Promise<void> {
   const drive = mcp.getDrive();
-  const file = await drive.startDriveHandoff();
+  const file = await drive.startDriveHandoff(treeId);
   const text = Buffer.from(await vscode.workspace.fs.readFile(file)).toString("utf8");
   await openAgentWithPrompt(text);
   const openPrompt = t("Open prompt");
   const stopDrive = t("Stop Drive");
+  const label = treeTitle?.trim() || treeId || "";
   const pick = await vscode.window.showInformationMessage(
-    t(
-      "Drive Mode: Agent opened with the prompt. Press Enter to send. Statuses go to the tree; structure only after Approve."
-    ),
+    label
+      ? t(
+          "Drive Mode for “{0}”: Agent opened with the prompt. Starts from the first actionable task. Press Enter to send.",
+          label
+        )
+      : t(
+          "Drive Mode: Agent opened with the prompt. Press Enter to send. Statuses go to the tree; structure only after Approve."
+        ),
     openPrompt,
     stopDrive
   );

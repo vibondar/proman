@@ -6,7 +6,7 @@
 
 Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
 
-**Версия:** 0.3.15
+**Версия:** 0.3.15 · [Changelog](./CHANGELOG.md)
 
 ---
 
@@ -125,9 +125,9 @@ alwaysApply: true
 
 ### Agent / Drive Mode
 
-- **Run in Agent** — статус `in_progress`, промпт в `.proman/prompts/`, открытие Agent с **вставкой промпта** в поле ввода (Enter отправляете вы); агент через MCP пишет статусы и при `done` — список `files`
+- **Run in Agent** — промпт с маркером `PROMAN_TASK_RUN:<taskId>` в `.proman/prompts/`, открытие Agent с **вставкой промпта** (Enter отправляете вы); статус `in_progress` (спиннер) ставит агент через MCP **только если маркер остался в сообщении**; при `done` — список `files`
 - **Add subtask** / **Delete** в деталях задачи — через диалоги IDE (в webview `prompt`/`confirm` недоступны)
-- **Drive Mode** — агент идёт по очереди через MCP `proman_*`
+- **Drive Mode** — выделите **заголовок секции** дерева (не первый узел-эпик) и запустите Drive: агент идёт по очереди этого дерева через MCP `proman_*`, начиная с первой разблокированной задачи
 - Структура дерева меняется только после вашего **Approve**
 - При активации пишется `.cursor/mcp.json` (сервер `proman`); после установки **включите** сервер в Settings → MCP и перезапустите MCP / Reload Window
 - Не правьте `.proman/*.json` вручную — только UI / MCP tools
@@ -160,6 +160,23 @@ alwaysApply: true
 - Кнопки **Pull** / **Push** в тулбаре
 - Авто-коммит `.proman/` при смене статуса (`proman: @alice todo → done: …`)
 - Команды: `Enable Git Sync`, `Configure Git Sync`
+
+#### Team Git sync · merge
+
+Источник правды для командного бэклога — файлы `.proman/` в git (`project.json`, `trees/*.json`, …). Слияние веток = обычный **git merge / rebase**. Семантический merge JSON по `task.id` доступен только вручную через **Resolve Proman Merge** (см. ниже).
+
+- **Auto-commit** затрагивает только `.proman/` (статусы / дерево), не весь код репозитория.
+- **Pull** меняет весь workspace (не только `.proman/`) — как в предупреждении перед `git pull`.
+- При **conflict markers** или битом JSON в `.proman/` после Pull / Reload / старта показывается предупреждение с путями и действиями **Открыть файл** / **Reload** / **Source Control**. Валидные секции `trees/*.json` продолжают загружаться; conflicted файлы **не** перезаписываются heal-ом с диска.
+- Если `git pull` упал с **CONFLICT**, ошибка сохраняется и hint указывает разрешить маркеры (часто под `.proman/`), затем Reload.
+- **Advanced:** команда `Proman: Resolve Proman Merge` — семантический merge двух валидных JSON-снимков секции по `task.id` (опционально с base для удалений). Не запускается автоматически на pull. Правила: `docs/adr/semantic-tree-merge.md`.
+
+**Правила командной работы** (меньше CONFLICT в `trees/*.json`):
+
+1. **Pull перед** сменой статусов и импортом MD.
+2. **Короткие коммиты** статусов; не смешивайте рефакторинг кода и массовый rewrite дерева в одном коммите без нужды.
+3. По возможности **один «владелец»** активной секции (`trees/<slug>.json`) на спринт.
+4. При **CONFLICT**: разрешите markers в git → Reload; не оставляйте `<<<<<<<` в JSON.
 
 ### Этап 2 — GitHub Issues
 
@@ -195,6 +212,7 @@ alwaysApply: true
 | Proman: Agent Drive Tree | Drive Mode |
 | Proman: Run Task in Agent | Промпт + открытие Agent |
 | Proman: Git Pull / Push | Синхронизация `.proman/` |
+| Proman: Resolve Proman Merge | Advanced: semantic merge двух JSON-снимков секции |
 | Proman: Enable Git Sync | Git backend |
 | Proman: Enable GitHub Issues | Мост Issues |
 | Proman: Sync Closed GitHub Issues | closed → done |

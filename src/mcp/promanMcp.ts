@@ -13,6 +13,7 @@ import { resolvePlanningDir } from "../core/pathSafety";
 import { sanitizeTaskFiles } from "../core/taskFiles";
 import { parseStructureOps } from "../core/proposalOps";
 import { wsMkdir, wsReadUri, wsWriteUri } from "../core/workspaceIo";
+import { driveRunMarker } from "../agent/runMarker";
 
 export class DriveSession {
   active = false;
@@ -32,22 +33,38 @@ export class DriveSession {
     this.active = false;
   }
 
-  buildDrivePrompt(): string {
+  buildDrivePrompt(treeId?: string | null): string {
     const state = this.store.current;
     if (!state) throw new Error("Проект не инициализирован");
-    const next = nextActionable(state);
-    const progress = this.store.progress();
+    const activeTreeId =
+      (treeId && state.trees.some((t) => t.id === treeId) ? treeId : null) ??
+      (state.meta.activeTreeId &&
+      state.trees.some((t) => t.id === state.meta.activeTreeId)
+        ? state.meta.activeTreeId
+        : null) ??
+      state.trees[0]?.id ??
+      null;
+    const activeTree = activeTreeId
+      ? state.trees.find((t) => t.id === activeTreeId)
+      : undefined;
+    const next = nextActionable(state, activeTreeId);
+    const progress = this.store.progress(undefined, activeTreeId ?? undefined);
     const queuePreview = next.queue
       .slice(0, 8)
       .map((q) => `- [${q.status}] ${q.title} (\`${q.id}\`)`)
       .join("\n");
+    const treeLine = activeTree
+      ? `- Дерево: **${activeTree.title}** (\`treeId: ${activeTree.id}\`)`
+      : "- Дерево: (все деревья)";
+    const runMarker = activeTreeId ? driveRunMarker(activeTreeId) : null;
 
-    return `# Proman Drive Mode — агент ведёт дерево (human-in-the-loop)
+    return `${runMarker ? `${runMarker}\n\n` : ""}# Proman Drive Mode — агент ведёт дерево (human-in-the-loop)
 
 Ты **оркестратор разработки** по дереву Proman. Источник правды — дерево в \`.proman/\`, не чат.
 
 ## Состояние
-- Прогресс: ${progress.done}/${progress.total} done, ${progress.inProgress} in_progress, ${progress.blocked} blocked
+${treeLine}
+${runMarker ? `- **run marker:** \`${runMarker}\` (должен остаться в сообщении пользователя)\n` : ""}- Прогресс: ${progress.done}/${progress.total} done, ${progress.inProgress} in_progress, ${progress.blocked} blocked
 - Режим Drive: активен
 - Следующая задача: ${
       next.task
@@ -59,9 +76,12 @@ export class DriveSession {
 ${queuePreview || "(пусто)"}
 
 ## Обязательный протокол (каждый цикл)
-1. \`proman_next_actionable\` — узнать текущую цель (не угадывай).
+0. **Gate:** веди дерево только если в сообщении пользователя есть \`${runMarker ?? "PROMAN_DRIVE_RUN:…"}\`. Если маркера нет / сообщение не про Drive — **не** меняй статусы через MCP.
+1. \`proman_next_actionable\`${
+      activeTreeId ? ` с \`treeId: "${activeTreeId}"\`` : ""
+    } — узнать текущую цель (не угадывай). Работай **только** в этом дереве; другие деревья не трогай.
 2. Если задачи нет — кратко резюмируй прогресс и **остановись**, спроси человека что дальше.
-3. \`proman_set_task_status\` → \`in_progress\` для выбранной задачи.
+3. \`proman_set_task_status\` → \`in_progress\` для выбранной задачи (это включает спиннер в дереве).
 4. \`proman_get_task\` — контекст, зависимости, impact.
 5. Реализуй **только эту задачу** в коде. Не расползайся по дереву.
 6. По завершении выбери статус:
@@ -103,14 +123,32 @@ proman_report_impact, proman_propose_structure_change, proman_get_proposal_statu
 Если MCP недоступен: скажи человеку включить сервер proman в Settings → MCP и сделать Reload Window.
 Не выдумывай статусы — читай дерево через \`proman_get_tree\` / \`proman_get_task\` (не правь \`.proman/*.json\` вручную: UI читает \`trees/*.json\`, плоский \`tree.json\` — снимок).
 
-Начни сейчас: вызови \`proman_next_actionable\` и покажи человеку план на первую задачу (1–3 пункта), затем приступай.
+Начни сейчас: вызови \`proman_next_actionable\`${
+      activeTreeId ? ` с \`treeId: "${activeTreeId}"\`` : ""
+    } и покажи человеку план на первую задачу (1–3 пункта), затем приступай.
 `;
   }
 
-  async startDriveHandoff(): Promise<vscode.Uri> {
+  async startDriveHandoff(treeId?: string | null): Promise<vscode.Uri> {
     await this.store.ensureInitialized();
+    const state = this.store.current!;
+    const resolved =
+      (treeId && state.trees.some((t) => t.id === treeId) ? treeId : null) ??
+      (state.meta.activeTreeId &&
+      state.trees.some((t) => t.id === state.meta.activeTreeId)
+        ? state.meta.activeTreeId
+        : null) ??
+      state.trees[0]?.id;
+    if (resolved) {
+      try {
+        this.store.setActiveTree(resolved);
+        await this.store.save();
+      } catch {
+        /* ignore */
+      }
+    }
     this.start();
-    const prompt = this.buildDrivePrompt();
+    const prompt = this.buildDrivePrompt(resolved);
     const proman = this.store.promanUri!;
     const dir = vscode.Uri.joinPath(proman, "prompts");
     await vscode.workspace.fs.createDirectory(dir);
@@ -157,8 +195,8 @@ export class PromanMcpServer {
       {
         name: "proman_next_actionable",
         description:
-          "Next unblocked todo/new/in_progress/needs_rework task for Drive Mode (prefer in_progress, then needs_rework)",
-        inputSchema: { type: "object", properties: {} },
+          "Next unblocked todo/new/in_progress/needs_rework task for Drive Mode (prefer in_progress, then needs_rework; optional treeId)",
+        inputSchema: { type: "object", properties: { treeId: { type: "string" } } },
       },
       {
         name: "proman_set_task_status",
@@ -247,7 +285,7 @@ export class PromanMcpServer {
         case "proman_get_task":
           return this.ok(this.getTask(String(args.taskId)));
         case "proman_next_actionable":
-          return this.ok(this.nextActionable());
+          return this.ok(this.nextActionable(args.treeId as string | undefined));
         case "proman_set_task_status":
           await this.setStatus(
             String(args.taskId),
@@ -378,14 +416,21 @@ export class PromanMcpServer {
     return { task, blockers, blocked, relations, impactHint: task.impactHint };
   }
 
-  private nextActionable() {
+  private nextActionable(treeId?: string) {
     const state = this.store.current;
     if (!state) return { error: "no project" };
-    const result = nextActionable(state);
+    const active =
+      treeId ||
+      (state.meta.activeTreeId &&
+      state.trees.some((t) => t.id === state.meta.activeTreeId)
+        ? state.meta.activeTreeId
+        : undefined);
+    const result = nextActionable(state, active);
     return {
       reason: result.reason,
       task: result.task,
       queue: result.queue,
+      treeId: result.treeId,
       driveActive: this.drive.active,
     };
   }

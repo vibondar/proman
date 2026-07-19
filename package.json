@@ -116,6 +116,10 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "proman.resolveMerge",
+        "title": "%proman.command.resolveMerge.title%"
+      },
+      {
         "command": "proman.enableGitSync",
         "title": "%proman.command.enableGitSync.title%"
       },
@@ -254,19 +258,29 @@
       ],
       "view/item/context": [
         {
-          "command": "proman.addRootTask",
+          "command": "proman.driveTree",
           "when": "view == proman.tree && viewItem == promanTreeSection",
           "group": "inline@1"
         },
         {
-          "command": "proman.exportTreeMd",
+          "command": "proman.addRootTask",
           "when": "view == proman.tree && viewItem == promanTreeSection",
           "group": "inline@2"
         },
         {
-          "command": "proman.deleteTree",
+          "command": "proman.exportTreeMd",
           "when": "view == proman.tree && viewItem == promanTreeSection",
           "group": "inline@3"
+        },
+        {
+          "command": "proman.deleteTree",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "inline@4"
+        },
+        {
+          "command": "proman.driveTree",
+          "when": "view == proman.tree && viewItem == promanTreeSection",
+          "group": "1_edit"
         },
         {
           "command": "proman.exportTreeMd",

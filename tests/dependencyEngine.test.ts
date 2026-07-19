@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DependencyEngine } from "../src/core/dependencyEngine";
+import { DependencyEngine, stringArraysEqual } from "../src/core/dependencyEngine";
 import { ProjectState, TaskNode } from "../src/core/types";
 
 function task(
@@ -123,5 +123,13 @@ describe("DependencyEngine", () => {
     );
     expect(engine.describeRelation(s, "a", "b")).toMatch(/depends on/);
     expect(engine.describeRelation(s, "a", "c")).toMatch(/not directly related/);
+  });
+});
+
+describe("stringArraysEqual", () => {
+  it("compares order-sensitively", () => {
+    expect(stringArraysEqual(["a", "b"], ["a", "b"])).toBe(true);
+    expect(stringArraysEqual(["a", "b"], ["b", "a"])).toBe(false);
+    expect(stringArraysEqual(["a"], ["a", "b"])).toBe(false);
   });
 });

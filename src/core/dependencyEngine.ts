@@ -12,6 +12,15 @@ function cloneState(state: ProjectState): ProjectState {
   return JSON.parse(JSON.stringify(state)) as ProjectState;
 }
 
+/** Order-sensitive equality for dependency id lists (avoids JSON.stringify). */
+export function stringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 function findCycles(tasks: Record<string, TaskNode>): string[][] {
   const cycles: string[][] = [];
   const visiting = new Set<string>();
@@ -56,8 +65,9 @@ function applyAction(state: ProjectState, action: ImpactAction): void {
         source: "manual",
       };
       state.tasks[task.id] = task;
-      if (action.parentId && state.tasks[action.parentId]) {
-        state.tasks[action.parentId].children.push(task.id);
+      const parent = action.parentId ? state.tasks[action.parentId] : undefined;
+      if (parent) {
+        parent.children.push(task.id);
       } else {
         state.roots.push(task.id);
       }
@@ -81,18 +91,21 @@ function applyAction(state: ProjectState, action: ImpactAction): void {
           delete state.tasks[id];
         }
         if (parentId) {
-          state.tasks[parentId].children = state.tasks[parentId].children.filter(
-            (id) => id !== action.taskId
-          );
+          const parent = state.tasks[parentId];
+          if (parent) {
+            parent.children = parent.children.filter((id) => id !== action.taskId);
+          }
         } else {
           state.roots = state.roots.filter((id) => id !== action.taskId);
         }
       } else {
         if (parentId) {
           const p = state.tasks[parentId];
-          const idx = p.children.indexOf(action.taskId);
-          if (idx >= 0) p.children.splice(idx, 1, ...children);
-          p.children = p.children.filter((id) => id !== action.taskId);
+          if (p) {
+            const idx = p.children.indexOf(action.taskId);
+            if (idx >= 0) p.children.splice(idx, 1, ...children);
+            p.children = p.children.filter((id) => id !== action.taskId);
+          }
         } else {
           const idx = state.roots.indexOf(action.taskId);
           if (idx >= 0) state.roots.splice(idx, 1, ...children);
@@ -189,7 +202,7 @@ export class DependencyEngine {
           change: t("Status: {0} → {1}", String(sb), String(sa)),
           suggestedStatus: sa,
         });
-      } else if (JSON.stringify(b.dependsOn) !== JSON.stringify(a.dependsOn)) {
+      } else if (!stringArraysEqual(b.dependsOn, a.dependsOn)) {
         affected.push({
           taskId: id,
           title: a.title,
