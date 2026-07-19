@@ -3,8 +3,16 @@
   "displayName": "Proman",
   "description": "Task tree in .proman/: statuses, Agent/MCP, team Git sync, GitHub Issues — for Cursor/VS Code developers.",
   "version": "0.3.16",
-  "publisher": "proman",
+  "publisher": "vibondar",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vibondar/proman.git"
+  },
+  "homepage": "https://github.com/vibondar/proman",
+  "bugs": {
+    "url": "https://github.com/vibondar/proman/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -389,7 +397,7 @@
     "vscode:prepublish": "npm run build",
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
-    "package": "vsce package --no-dependencies --baseContentUrl https://example.com/proman --baseImagesUrl https://example.com/proman",
+    "package": "vsce package --no-dependencies --baseContentUrl https://github.com/vibondar/proman/raw/main/ --baseImagesUrl https://github.com/vibondar/proman/raw/main/",
     "install:cursor": "npm run package && cursor --install-extension \"$(ls -t *.vsix | head -1)\" --force",
     "test": "vitest run",
     "test:watch": "vitest",
