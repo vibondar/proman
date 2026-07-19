@@ -5,6 +5,11 @@ All notable changes to Proman are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.19] — 2026-07-19
+
+### Changed
+- Marketplace package `name` renamed to `proman-tasks` (id **`vibondar.proman-tasks`**) — `proman` was reserved after the previous listing was removed; `displayName` stays **Proman**
+
 ## [0.3.18] — 2026-07-19
 
 ### Fixed
@@ -71,6 +76,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - GitHub Issues: create on add, closed → done, safe owner/repo/URL checks
 - MIT license, bilingual UI (EN/RU), RU + EN README
 
+[0.3.19]: https://github.com/vibondar/proman/releases/tag/v0.3.19
 [0.3.18]: https://github.com/vibondar/proman/releases/tag/v0.3.18
 [0.3.17]: https://github.com/vibondar/proman/releases/tag/v0.3.17
 [0.3.16]: https://github.com/vibondar/proman/releases/tag/v0.3.16
