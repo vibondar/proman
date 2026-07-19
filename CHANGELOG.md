@@ -7,6 +7,9 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ## [0.3.16] — 2026-07-19
 
+### Notes
+- Release published with a GitHub-signed merge commit (Verified tag target).
+
 ### Fixed
 - Cap `.proman/` JSON reads at 2MB before parse (DoS guard)
 - `progress()` / `isDescendant` / cascade delete: protect against cycles in `children`
