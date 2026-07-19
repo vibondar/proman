@@ -29,6 +29,7 @@ import {
 } from "./tree/promanTree";
 import { runTreeSearch } from "./tree/treeSearch";
 import { resolveDriveTreeId, resolveTaskId } from "./tree/utils";
+import { requireOpenWorkspace } from "./workspaceGuard";
 
 export interface RegisterCommandsDeps {
   context: vscode.ExtensionContext;
@@ -64,10 +65,17 @@ function registerWorkspaceCommands(d: RegisterCommandsDeps): void {
     vscode.commands.registerCommand("proman.open", () =>
       vscode.commands.executeCommand("proman.tree.focus")
     ),
-    vscode.commands.registerCommand("proman.importPlanningDocs", () => d.importPlanning()),
-    vscode.commands.registerCommand("proman.setPlanningDirectory", () => d.setPlanningDir()),
+    vscode.commands.registerCommand("proman.importPlanningDocs", async () => {
+      if (!requireOpenWorkspace(store)) return;
+      await d.importPlanning();
+    }),
+    vscode.commands.registerCommand("proman.setPlanningDirectory", async () => {
+      if (!requireOpenWorkspace(store)) return;
+      await d.setPlanningDir();
+    }),
     vscode.commands.registerCommand("proman.enrichTreeFromMd", () => handoff.enrichFromMd()),
     vscode.commands.registerCommand("proman.driveTree", async (item?: PromanNode) => {
+      if (!requireOpenWorkspace(store)) return;
       // Scope = tree section header (not the first epic/task node inside it).
       const treeId = resolveDriveTreeId(
         item,
@@ -303,6 +311,7 @@ function registerTaskMutationCommands(
       refreshUi();
     }),
     vscode.commands.registerCommand("proman.addRootTask", async (item?: PromanNode) => {
+      if (!requireOpenWorkspace(store)) return;
       await store.ensureInitialized();
       const section = item?.kind === "section" ? item : undefined;
       if (section) {

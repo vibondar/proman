@@ -159,6 +159,7 @@
   "Proman: no tasks to update from closed Issues": "Proman: нет задач для обновления по закрытым Issues",
   "Proman: no workspace": "Proman: нет workspace",
   "Proman: nothing on disk — import MD": "Proman: на диске пусто — импортируйте MD",
+  "Proman: open a project folder first (File → Open Folder).": "Proman: сначала откройте папку проекта (File → Open Folder).",
   "Proman: open a project folder (File → Open Folder), then run “Proman: Import Planning Docs”.": "Proman: откройте папку проекта (File → Open Folder), затем выполните «Proman: Import Planning Docs».",
   "Proman: planning files changed. Sync the tree?": "Proman: файлы планирования изменились. Синхронизировать дерево?",
   "Proman: planningDir = {0}": "Proman: planningDir = {0}",

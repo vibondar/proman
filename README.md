@@ -6,7 +6,7 @@ Cursor / VS Code extension for managing development with a **task tree** stored 
 
 Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHub Issues bridge — without requiring Jira/Linear.
 
-**Version:** 0.3.17 · [Changelog](./CHANGELOG.md)
+**Version:** 0.3.18 · [Changelog](./CHANGELOG.md)
 
 ![Proman UI — project tree and task detail](./media/proman-ui.png)
 
@@ -28,7 +28,7 @@ Developers and small teams who want to:
 
 Pre-built builds are on GitHub Releases — no need to compile the extension yourself.
 
-1. Open **[Releases](https://github.com/vibondar/proman/releases)** and download the latest `proman-*.vsix` (e.g. `proman-0.3.17.vsix`).
+1. Open **[Releases](https://github.com/vibondar/proman/releases)** and download the latest `proman-*.vsix` (e.g. `proman-0.3.18.vsix`).
 2. In Cursor or VS Code: **Extensions** sidebar → `…` (Views and More Actions) → **Install from VSIX…** → select the downloaded file.
 3. **Developer: Reload Window** (Command Palette).
 
