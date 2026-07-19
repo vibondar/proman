@@ -8,6 +8,8 @@ Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHu
 
 **Version:** 0.3.16 · [Changelog](./CHANGELOG.md)
 
+![Proman UI — project tree and task detail](./media/proman-ui.png)
+
 ---
 
 ## Who it’s for

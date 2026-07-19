@@ -15,3 +15,4 @@ esbuild.config.mjs
 tsconfig.json
 .gitignore
 .DS_Store
+media/proman-ui.png

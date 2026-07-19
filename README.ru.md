@@ -8,6 +8,8 @@
 
 **Версия:** 0.3.16 · [Changelog](./CHANGELOG.md)
 
+![Proman UI — дерево задач и панель детали](./media/proman-ui.png)
+
 ---
 
 ## Для кого
