@@ -5,6 +5,13 @@ All notable changes to Proman are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.17] — 2026-07-19
+
+### Changed
+- Marketplace publisher set to `vibondar` (`vibondar.proman`)
+- Categories: `AI`, `Other`; discovery keywords added
+- `package` script links README assets to the GitHub repo
+
 ## [0.3.16] — 2026-07-19
 
 ### Notes
@@ -59,6 +66,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - GitHub Issues: create on add, closed → done, safe owner/repo/URL checks
 - MIT license, bilingual UI (EN/RU), RU + EN README
 
+[0.3.17]: https://github.com/vibondar/proman/releases/tag/v0.3.17
 [0.3.16]: https://github.com/vibondar/proman/releases/tag/v0.3.16
 [0.3.15]: https://github.com/vibondar/proman/releases/tag/v0.3.15
 [0.3.14]: https://github.com/vibondar/proman/releases/tag/v0.3.14
