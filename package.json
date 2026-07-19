@@ -1,6 +1,6 @@
 {
   "name": "proman2",
-  "displayName": "Proman",
+  "displayName": "Proman2",
   "description": "Task tree in .proman/: statuses, Agent/MCP, team Git sync, GitHub Issues — for Cursor/VS Code developers.",
   "version": "0.3.19",
   "publisher": "vibondar",
