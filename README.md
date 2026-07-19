@@ -28,11 +28,11 @@ Developers and small teams who want to:
 
 Pre-built builds are on GitHub Releases — no need to compile the extension yourself.
 
-1. Open **[Releases](https://github.com/vibondar/proman/releases)** and download the latest `proman-tasks-*.vsix` (e.g. `proman-tasks-0.3.19.vsix`).
+1. Open **[Releases](https://github.com/vibondar/proman/releases)** and download the latest `proman2-*.vsix` (e.g. `proman2-0.3.19.vsix`).
 2. In Cursor or VS Code: **Extensions** sidebar → `…` (Views and More Actions) → **Install from VSIX…** → select the downloaded file.
 3. **Developer: Reload Window** (Command Palette).
 
-Extension id on the Marketplace: **`vibondar.proman-tasks`**.
+Extension id on the Marketplace: **`vibondar.proman2`**.
 
 To build from source instead: `npm install && npm run install:cursor` (see [Extension development](#extension-development)).
 

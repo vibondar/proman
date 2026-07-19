@@ -8,7 +8,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 ## [0.3.19] — 2026-07-19
 
 ### Changed
-- Marketplace package `name` renamed to `proman-tasks` (id **`vibondar.proman-tasks`**) — `proman` was reserved after the previous listing was removed; `displayName` stays **Proman**
+- Marketplace package `name` set to `proman2` (id **`vibondar.proman2`**) — `proman` was reserved after the previous listing was removed; `displayName` stays **Proman**
 
 ## [0.3.18] — 2026-07-19
 

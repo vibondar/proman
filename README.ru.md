@@ -28,11 +28,11 @@
 
 Готовые сборки лежат в GitHub Releases — расширение самому собирать не обязательно.
 
-1. Откройте **[Releases](https://github.com/vibondar/proman/releases)** и скачайте свежий `proman-tasks-*.vsix` (например `proman-tasks-0.3.19.vsix`).
+1. Откройте **[Releases](https://github.com/vibondar/proman/releases)** и скачайте свежий `proman2-*.vsix` (например `proman2-0.3.19.vsix`).
 2. В Cursor или VS Code: боковая панель **Extensions** → `…` (Views and More Actions) → **Install from VSIX…** → выберите скачанный файл.
 3. **Developer: Reload Window** (Command Palette).
 
-Id расширения в Marketplace: **`vibondar.proman-tasks`**.
+Id расширения в Marketplace: **`vibondar.proman2`**.
 
 Сборка из исходников: `npm install && npm run install:cursor` (см. [Разработка расширения](#разработка-расширения)).
 
