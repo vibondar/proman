@@ -6,7 +6,7 @@
 
 Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
 
-**Версия:** 0.3.15 · [Changelog](./CHANGELOG.md)
+**Версия:** 0.3.16 · [Changelog](./CHANGELOG.md)
 
 ---
 

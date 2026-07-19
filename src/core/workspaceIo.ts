@@ -7,6 +7,13 @@ import { resolveInside, resolveTreeJsonPath } from "./pathSafety";
  * All writes resolve through resolveInside(workspaceRoot, …).
  */
 
+/** Reject oversized `.proman/` reads (DoS / memory) — same cap as MD import. */
+export const MAX_PROMAN_READ_BYTES = 2 * 1024 * 1024;
+
+export function isPromanReadTooLarge(byteLength: number): boolean {
+  return byteLength > MAX_PROMAN_READ_BYTES;
+}
+
 export async function wsExists(workspaceRoot: string, ...parts: string[]): Promise<boolean> {
   const full = resolveInside(workspaceRoot, ...parts);
   if (!full) return false;
@@ -25,7 +32,10 @@ export async function wsReadText(
   const full = resolveInside(workspaceRoot, ...parts);
   if (!full) return null;
   try {
-    const data = await vscode.workspace.fs.readFile(vscode.Uri.file(full));
+    const uri = vscode.Uri.file(full);
+    const st = await vscode.workspace.fs.stat(uri);
+    if (isPromanReadTooLarge(st.size)) return null;
+    const data = await vscode.workspace.fs.readFile(uri);
     return Buffer.from(data).toString("utf8");
   } catch {
     return null;

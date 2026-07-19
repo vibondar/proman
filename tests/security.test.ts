@@ -25,6 +25,10 @@ import {
   sanitizeErrorMessage,
 } from "../src/core/githubIssueLink";
 import { sanitizeGitCommitMessage } from "../src/core/gitSync";
+import {
+  isPromanReadTooLarge,
+  MAX_PROMAN_READ_BYTES,
+} from "../src/core/workspaceIo";
 
 function task(
   partial: Partial<TaskNode> & { id: string; title: string }
@@ -390,5 +394,11 @@ describe("security: imports / git / github surfaces", () => {
   it("sanitizeErrorMessage truncates and strips secrets-ish noise", () => {
     const long = "x".repeat(500);
     expect(sanitizeErrorMessage(long, 40).length).toBeLessThanOrEqual(40);
+  });
+
+  it("rejects oversized .proman reads at the same 2MB cap as MD import", () => {
+    expect(MAX_PROMAN_READ_BYTES).toBe(2 * 1024 * 1024);
+    expect(isPromanReadTooLarge(MAX_PROMAN_READ_BYTES)).toBe(false);
+    expect(isPromanReadTooLarge(MAX_PROMAN_READ_BYTES + 1)).toBe(true);
   });
 });

@@ -85,11 +85,51 @@ function newId(): string {
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Remove `taskId` from parent.children or from roots (in-place). */
+function detachFromParent(
+  tasks: Record<string, TaskNode>,
+  roots: string[],
+  parentId: string | null | undefined,
+  taskId: string
+): void {
+  if (parentId && tasks[parentId]) {
+    tasks[parentId].children = tasks[parentId].children.filter((id) => id !== taskId);
+  } else {
+    const next = roots.filter((id) => id !== taskId);
+    roots.splice(0, roots.length, ...next);
+  }
+}
+
+/** Replace `taskId` with its children in parent.children or roots. */
+function promoteChildren(
+  tasks: Record<string, TaskNode>,
+  roots: string[],
+  parentId: string | null | undefined,
+  taskId: string,
+  children: string[]
+): void {
+  if (parentId && tasks[parentId]) {
+    const parent = tasks[parentId];
+    const idx = parent.children.indexOf(taskId);
+    if (idx >= 0) parent.children.splice(idx, 1, ...children);
+    else parent.children = parent.children.filter((id) => id !== taskId);
+  } else {
+    const idx = roots.indexOf(taskId);
+    if (idx >= 0) roots.splice(idx, 1, ...children);
+    else {
+      const next = roots.filter((id) => id !== taskId);
+      roots.splice(0, roots.length, ...next);
+    }
+  }
+}
+
 export class ProjectStore {
   private state: ProjectState | null = null;
   private readonly onDidChangeEmitter = new vscode.EventEmitter<ProjectState | null>();
   readonly onDidChange = this.onDidChangeEmitter.event;
   private log: (msg: string) => void = () => undefined;
+  /** Lazy reverse index: childId → parentId. Invalidated on structural mutations. */
+  private childToParent: Map<string, string> | null = null;
   private pendingHistory: HistoryEntry[] = [];
   private onAssigned: ((e: AssignmentEvent) => void) | undefined;
   /** Last known assignees — used to detect assignments after disk reload. */
@@ -314,6 +354,7 @@ export class ProjectStore {
       }
 
       this.state = projectStateFromForest(meta, trees);
+      this.invalidateParentIndex();
       this.lastLocalMutationMs = Date.now();
 
       const hasTreeProblems = this.lastLoadProblems.some((p) => p.path.startsWith("trees/"));
@@ -561,6 +602,10 @@ export class ProjectStore {
     }
   }
 
+  private invalidateParentIndex(): void {
+    this.childToParent = null;
+  }
+
   private rebuildFlat(): void {
     if (!this.state) return;
     const flat = flattenForest(this.state.trees);
@@ -568,6 +613,7 @@ export class ProjectStore {
     this.state.tasks = flat.tasks;
     this.state.edges = flat.edges;
     this.state.meta = syncMetaTrees(this.state.meta, this.state.trees);
+    this.invalidateParentIndex();
   }
 
   private syncTaskToTree(taskId: string): void {
@@ -690,7 +736,10 @@ export class ProjectStore {
   progress(rootId?: string, treeId?: string): TreeProgress {
     const counts: TreeProgress = { done: 0, total: 0, inProgress: 0, blocked: 0, todo: 0 };
     if (!this.state) return counts;
+    const visited = new Set<string>();
     const visit = (id: string) => {
+      if (visited.has(id)) return;
+      visited.add(id);
       const t = this.state!.tasks[id];
       if (!t) return;
       counts.total++;
@@ -797,14 +846,13 @@ export class ProjectStore {
     }
     if (patch.description !== undefined) {
       const enriched = enrichTaskFromDescription(task);
-      Object.assign(task, {
-        estimateSp: enriched.estimateSp,
-        estimateHours: enriched.estimateHours,
-        tags: enriched.tags,
-        code: enriched.code,
-        tests: enriched.tests,
-        assignee: enriched.assignee,
-      });
+      // Do not let description meta overwrite fields the caller set explicitly in patch.
+      if (!("estimateSp" in patch)) task.estimateSp = enriched.estimateSp;
+      if (!("estimateHours" in patch)) task.estimateHours = enriched.estimateHours;
+      if (!("tags" in patch)) task.tags = enriched.tags;
+      if (!("code" in patch)) task.code = enriched.code;
+      if (!("tests" in patch)) task.tests = enriched.tests;
+      if (!("assignee" in patch)) task.assignee = enriched.assignee;
     }
     const metaTouched =
       patch.description !== undefined ||
@@ -873,37 +921,19 @@ export class ProjectStore {
 
     if (mode === "cascade") {
       const stack = [...children];
+      const seen = new Set<string>();
       while (stack.length) {
         const id = stack.pop()!;
+        if (seen.has(id) || id === taskId) continue;
+        seen.add(id);
         const t = tasks[id];
         if (!t) continue;
         stack.push(...t.children);
         delete tasks[id];
       }
+      detachFromParent(tasks, roots, parentId, taskId);
     } else {
-      if (parentId && tasks[parentId]) {
-        const parent = tasks[parentId];
-        const idx = parent.children.indexOf(taskId);
-        if (idx >= 0) parent.children.splice(idx, 1, ...children);
-      } else {
-        const idx = roots.indexOf(taskId);
-        if (idx >= 0) roots.splice(idx, 1, ...children);
-      }
-    }
-
-    if (parentId && tasks[parentId] && mode === "cascade") {
-      tasks[parentId].children = tasks[parentId].children.filter((id) => id !== taskId);
-    } else if (!parentId && mode === "cascade") {
-      if (tree) tree.roots = tree.roots.filter((id) => id !== taskId);
-      else this.state.roots = this.state.roots.filter((id) => id !== taskId);
-    } else if (mode === "promote") {
-      if (parentId && tasks[parentId]) {
-        tasks[parentId].children = tasks[parentId].children.filter((id) => id !== taskId);
-      } else if (tree) {
-        tree.roots = tree.roots.filter((id) => id !== taskId);
-      } else {
-        this.state.roots = this.state.roots.filter((id) => id !== taskId);
-      }
+      promoteChildren(tasks, roots, parentId, taskId, children);
     }
 
     for (const t of Object.values(tasks)) {
@@ -911,6 +941,7 @@ export class ProjectStore {
       t.children = t.children.filter((id) => tasks[id]);
     }
     delete tasks[taskId];
+    this.invalidateParentIndex();
 
     if (tree) {
       tree.edges = edgesFromTasks(tree.tasks);
@@ -935,6 +966,9 @@ export class ProjectStore {
       this.ensureActiveTree();
     const tree = findTree(this.state.trees, treeId);
     if (!tree || !tree.tasks[taskId]) {
+      this.log(
+        `moveTask: warning — task ${taskId} present in flat but missing from tree ${treeId}; using flat fallback (possible desync)`
+      );
       // Fallback: mutate flat then sync
       const oldParent = this.findParent(taskId);
       if (oldParent) {
@@ -1069,17 +1103,24 @@ export class ProjectStore {
 
   findParent(taskId: string): string | null {
     if (!this.state) return null;
-    for (const [id, t] of Object.entries(this.state.tasks)) {
-      if (t.children.includes(taskId)) return id;
+    if (!this.childToParent) {
+      const map = new Map<string, string>();
+      for (const [id, t] of Object.entries(this.state.tasks)) {
+        for (const c of t.children) map.set(c, id);
+      }
+      this.childToParent = map;
     }
-    return null;
+    return this.childToParent.get(taskId) ?? null;
   }
 
   private isDescendant(ancestorId: string, maybeDescendantId: string): boolean {
     if (!this.state) return false;
+    const visited = new Set<string>();
     const stack = [...(this.state.tasks[ancestorId]?.children ?? [])];
     while (stack.length) {
       const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
       if (id === maybeDescendantId) return true;
       stack.push(...(this.state.tasks[id]?.children ?? []));
     }

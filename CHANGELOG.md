@@ -5,6 +5,18 @@ All notable changes to Proman are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.16] — 2026-07-19
+
+### Fixed
+- Cap `.proman/` JSON reads at 2MB before parse (DoS guard)
+- `progress()` / `isDescendant` / cascade delete: protect against cycles in `children`
+- `updateTask`: description enrichment no longer overwrites fields set explicitly in the patch
+
+### Changed
+- `deleteTask`: shared helpers for promote/cascade parent/roots updates
+- `findParent`: lazy `childToParent` index (invalidated on structural mutations)
+- `moveTask`: log a warning when falling back due to tree/flat desync
+
 ## [0.3.15] — 2026-07-19
 
 ### Added
@@ -44,6 +56,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - GitHub Issues: create on add, closed → done, safe owner/repo/URL checks
 - MIT license, bilingual UI (EN/RU), RU + EN README
 
+[0.3.16]: https://github.com/vibondar/proman/releases/tag/v0.3.16
 [0.3.15]: https://github.com/vibondar/proman/releases/tag/v0.3.15
 [0.3.14]: https://github.com/vibondar/proman/releases/tag/v0.3.14
 [0.3.13]: https://github.com/vibondar/proman/releases/tag/v0.3.13-pre
