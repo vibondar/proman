@@ -10,7 +10,7 @@ title: Git sync merge conflicts
 ## Эпик A — документация стратегии
 
 Зачем этот эпик: закрыть вопросы ревью про merge до кода — зафиксировать, что Git sync = общий JSON в git, без автоматического трёхстороннего merge задач, и какие правила снижает число конфликтов.
-Критерии готовности эпика: раздел в README.md и README.en.md; ограничения названы честно (нет semantic merge / нет UI по markers — до реализации соответствующих эпиков).
+Критерии готовности эпика: раздел в README.md и README.ru.md; ограничения названы честно (нет semantic merge / нет UI по markers — до реализации соответствующих эпиков).
 
 ### Раздел в README
 
@@ -24,13 +24,13 @@ title: Git sync merge conflicts
 - [ ] Описать стратегию слияний в README
   Цель: зафиксировать модель «источник правды — файлы `.proman/` в git; слияние = обычный git merge/rebase».
   Критерии готовности:
-  1. README.md и README.en.md содержат раздел (например «Team Git sync · merge»)
+  1. README.md и README.ru.md содержат раздел (например «Team Git sync · merge»)
   2. Явно сказано: нет семантического merge JSON; auto-commit только `.proman/`
   3. Указано, что pull затрагивает весь workspace (как в текущем warning)
   Оценка: 2 SP / 1 час
   Assignee: @vibondar
   Теги: #docs #infra
-  Код: README.md, README.en.md
+  Код: README.md, README.ru.md
   Вне scope: перевод на другие языки кроме en/ru.
 
 - [ ] Описать правила командной работы
@@ -43,7 +43,7 @@ title: Git sync merge conflicts
   Оценка: 1 SP / 0.5 часа
   Assignee: @vibondar
   Теги: #docs
-  Код: README.md, README.en.md
+  Код: README.md, README.ru.md
   Depends on Описать стратегию слияний в README
 
 ## Эпик B — детект конфликтов и UX
@@ -195,7 +195,7 @@ Depends on Диалог при conflict markers после pull/load
   Оценка: 1 SP / 0.5 часа
   Assignee: @vibondar
   Теги: #docs
-  Код: README.md, README.en.md
+  Код: README.md, README.ru.md
   Depends on Диалог при conflict markers после pull/load
 
 - [ ] Smoke и тесты регрессии load

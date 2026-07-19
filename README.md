@@ -1,152 +1,150 @@
 # Proman
 
-**Язык:** [Русский](./README.md) · [English](./README.en.md)
+**Language:** [English](./README.md) · [Русский](./README.ru.md)
 
-Расширение **Cursor / VS Code** для управления разработкой через дерево задач в `.proman/`.
+Cursor / VS Code extension for managing development with a **task tree** stored in `.proman/`.
 
-Локальный бэклог, статусы, зависимости, handoff в Agent, Git-синхронизация команды и мост к GitHub Issues — без обязательного Jira/Linear.
+Local backlog, statuses, dependencies, Agent handoff, team Git sync, and a GitHub Issues bridge — without requiring Jira/Linear.
 
-**Версия:** 0.3.16 · [Changelog](./CHANGELOG.md)
-
----
-
-## Для кого
-
-Разработчики и небольшие команды, которые хотят:
-
-- вести план рядом с кодом (файлы в репозитории);
-- генерировать план разработки в Cursor **по единому шаблону** и сразу импортировать в дерево;
-- **переносить план** между проектами **с сохранением прогресса** (экспорт MD → импорт);
-- отдавать задачи Cursor Agent с контекстом, статусами и списком затронутых файлов;
-- синхронизироваться через Git / GitHub Issues без тяжёлого PM-стека.
+**Version:** 0.3.16 · [Changelog](./CHANGELOG.md)
 
 ---
 
-## Быстрый старт
+## Who it’s for
 
-1. Установите VSIX (`npm run install:cursor` или Install from VSIX) и сделайте **Reload Window**.
-2. Включите MCP-сервер **proman**: Settings → **MCP** → найдите `proman` (или проверьте `.cursor/mcp.json` в проекте) → включите / Restart. Без этого Agent не сможет обновлять статусы через tools `proman_*`.
-3. Откройте папку проекта → Activity Bar → **Proman**.
-4. Импортируйте MD или добавьте корневую задачу.
-5. (Опционально) `Proman: Set Current User` — кто вы в команде.
-6. (Опционально) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+Developers and small teams who want to:
 
-### Шаблон плана в правилах Cursor
+- keep the plan next to the code (files in the repo);
+- generate a development plan in Cursor **from a single template** and import it into the tree;
+- **move a plan** between projects **with progress preserved** (export MD → import);
+- hand tasks to Cursor Agent with context, statuses, and touched-file lists;
+- sync via Git / GitHub Issues without a heavy PM stack.
 
-Чтобы Cursor **стабильно** создавал план разработки в формате, который Proman импортирует без ручной правки, подключите шаблон [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) как правило проекта.
+---
 
-1. Скопируйте шаблон в свой репозиторий (если его ещё нет), например:
-   `docs/templates/proman-tasks.md`
-2. Создайте правило Cursor:
-   - Cursor Settings → **Rules** → Project Rules → **Add Rule**, или
-   - файл `.cursor/rules/proman-plan.mdc` в корне проекта.
-3. Пример содержимого правила:
+## Quick start
+
+1. Install the VSIX (`npm run install:cursor` or Install from VSIX) and **Reload Window**.
+2. Enable the **proman** MCP server: Settings → **MCP** → find `proman` (or check `.cursor/mcp.json` in the project) → enable / Restart. Without this, the Agent cannot update statuses via `proman_*` tools.
+3. Open a project folder → Activity Bar → **Proman**.
+4. Import Markdown or add a root task.
+5. (Optional) `Proman: Set Current User` — who you are on the team.
+6. (Optional) `Proman: Enable Git Sync` / `Enable GitHub Issues`.
+
+### Plan template in Cursor Rules
+
+So Cursor **reliably** drafts plans in a format Proman can import, wire [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) as a project rule.
+
+1. Copy the template into your repo if needed, e.g. `docs/templates/proman-tasks.md`.
+2. Create a Cursor rule:
+   - Cursor Settings → **Rules** → Project Rules → **Add Rule**, or
+   - file `.cursor/rules/proman-plan.mdc` at the project root.
+3. Example rule body:
 
 ```markdown
 ---
-description: Планы разработки для Proman — только по шаблону proman-tasks.md
+description: Proman development plans — follow proman-tasks.md only
 alwaysApply: true
 ---
 
-# План разработки (Proman)
+# Development plan (Proman)
 
-Когда пользователь просит roadmap, план задач, backlog или planning MD для этого проекта:
+When the user asks for a roadmap, task plan, backlog, or planning MD for this project:
 
-1. Читай и следуй шаблону `docs/templates/proman-tasks.md` (frontmatter `type: plan`, заголовки, чекбоксы `- [ ]`, описания, Depends on, Оценка / Assignee / Теги / Код).
-2. Пиши результат в один `.md` файл (например `docs/plans/<name>.md`) в формате шаблона.
-3. Не придумывай другой формат списков задач: Proman парсит именно этот MD.
-4. После генерации напомни импортировать файл: команда **Proman: Import Planning Docs**.
+1. Read and follow `docs/templates/proman-tasks.md` (frontmatter `type: plan`, headings, `- [ ]` checkboxes, descriptions, Depends on, Estimate / Assignee / Tags / Code).
+2. Write one `.md` file (e.g. `docs/plans/<name>.md`) in that template format.
+3. Do not invent another task-list format — Proman parses this MD.
+4. After generation, remind them to import via **Proman: Import Planning Docs**.
 ```
 
-4. Reload Window (или откройте новый чат), затем попросите, например:  
-   *«Составь план разработки по шаблону Proman»* / *«Сделай MD-план для фичи X»*.
-5. Импортируйте полученный файл: **Proman: Import Planning Docs**.
+4. Reload Window (or start a new chat), then ask e.g. *“Draft a development plan using the Proman template”*.
+5. Import the file: **Proman: Import Planning Docs**.
 
-Без правила можно разово указать путь к шаблону в чате — но правило избавляет от повторения и снижает «свободный» формат от модели.
+You can also paste the template path once in chat; a rule removes repetition and free-form output.
 
-### План задач через Cursor (разово)
+### One-off planning with Cursor
 
-В чате дайте путь к [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) и попросите составить roadmap **по этому шаблону**, затем **Proman: Import Planning Docs**.
+In chat, point at [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md), ask for a roadmap **using that template**, then **Proman: Import Planning Docs**.
 
-Данные проекта:
+Project data:
 
 ```
 .proman/
   project.json      # meta, team, sync, github, trees[]
-  trees/            # одно дерево на импортированный MD/план
+  trees/            # one tree per imported MD/plan
     <slug>.json
-  tree.json         # плоский снимок всех деревьев (MCP/совместимость)
+  tree.json         # flattened snapshot of all trees (MCP/compat)
   edges.json
   history.json
   comments/
   prompts/
-  imports/          # копии исходных MD
+  imports/          # copies of source MD
   proposals/
 ```
 
-Каждый файл из импорта → отдельная **секция** в панели Proman. Статусы пишутся в `trees/<slug>.json` и переживают reopen; повторный Import/Sync **мержит** структуру из MD, сохраняя `status` / assignee / `changedFiles`. Источник правды для UI — `trees/*`; плоский `tree.json` синхронизируется (в т.ч. после записей MCP).
+Each imported file becomes a **section** in the Proman panel. Statuses live in `trees/<slug>.json` across reopen; re-import/sync **merges** MD structure while preserving `status` / assignee / `changedFiles`. UI reads `trees/*`; flat `tree.json` stays in sync (including after MCP writes).
 
-В **командном** репозитории коммитьте `.proman/` (не добавляйте его в `.gitignore`).
+In a **team** repository, commit `.proman/` (do not add it to `.gitignore`).
 
-### Переносимость плана с прогрессом
+### Portable plans with progress
 
-План разработки можно **вынести из одного workspace и поднять в другом**, не теряя отмеченный прогресс:
+You can **take a plan out of one workspace and restore it in another** without losing marked progress:
 
-1. На секции дерева в панели Proman: **Export Tree to Markdown** (или ПКМ → экспорт).
-2. Сохраните `.md` — в файл попадут иерархия, описания, зависимости, assignee и **текущие статусы** (`done` → `- [x]`, остальные через `Status: …` при необходимости).
-3. В целевом проекте: **Import Planning Docs** — дерево восстановится с прогрессом.
+1. On a tree section in the Proman panel: **Export Tree to Markdown** (or context menu → export).
+2. Save the `.md` — it includes hierarchy, descriptions, dependencies, assignee, and **current statuses** (`done` → `- [x]`, others via `Status: …` when needed).
+3. In the target project: **Import Planning Docs** — the tree comes back with progress.
 
-Так же удобно бэкапить план перед экспериментом или передавать roadmap коллеге без копирования всего `.proman/`.
+Useful for backups before experiments or sharing a roadmap without copying all of `.proman/`.
 
-Удаление секции: **Delete Task Tree** — с предупреждением, что прогресс в этом дереве **не сохранится** (при необходимости сначала сделайте экспорт).
+Removing a section: **Delete Task Tree** — warns that progress in that tree **will not be kept** (export first if you need it).
 
 ---
 
-## Возможности
+## Features
 
-### Дерево и статусы
+### Tree and statuses
 
-- Панель дерева: статусы `todo` / `new` / `in_progress` / `done` / `needs_rework` / `error` / `blocked`
-- Несколько деревьев (секций) в одном проекте — по одному на импортированный план
-- Цвета иконок, Σ SP на эпиках, assignee в строке
-- Detail panel: описание, оценки, теги, зависимости, assign, комментарии, история
-- У **done**-задач: список **созданных/изменённых файлов** (клик → открыть в IDE); свои + done-подзадачи; источник — MCP `files` при `done`, иначе fallback на `Код:` / `Тесты:` из описания
-- Поиск по дереву + фильтр пути
-- **👤 Мои задачи** — фильтр по `team.currentUser`
-- **Экспорт секции в MD** с текущим прогрессом; **удаление дерева** с подтверждением
+- Tree panel: statuses `todo` / `new` / `in_progress` / `done` / `needs_rework` / `error` / `blocked`
+- Multiple trees (sections) in one project — one per imported plan
+- Icon colors, Σ SP on epics, assignee in the row
+- Detail panel: description, estimates, tags, dependencies, assign, comments, history
+- On **done** tasks: **created/modified files** list (click → open in IDE); own + done subtasks; source — MCP `files` on `done`, else fallback to `Code:` / `Tests:` from the description
+- Tree search + path highlight
+- **My tasks** — filter by `team.currentUser`
+- **Export section to MD** with current progress; **delete tree** with confirmation
 
-### Планирование из Markdown
+### Planning from Markdown
 
-- Импорт roadmap / plan / чеклистов → дерево
-- Frontmatter `type: plan` → id `plan_1`, `plan_2`, …
-- Шаблон: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — подключайте через **правила Cursor** (см. выше)
-- Пример meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
-- Round-trip: экспорт → MD → импорт **сохраняет прогресс** (чекбоксы + строки `Status:`)
+- Import roadmap / plan / checklists → tree
+- Frontmatter `type: plan` → ids `plan_1`, `plan_2`, …
+- Template: [`docs/templates/proman-tasks.md`](./docs/templates/proman-tasks.md) — attach via **Cursor Rules** (see above)
+- Sample meta: [`docs/templates/proman-project.json`](./docs/templates/proman-project.json)
+- Round-trip: export → MD → import **preserves progress** (checkboxes + `Status:` lines)
 
 ### Agent / Drive Mode
 
-- **Run in Agent** — промпт с маркером `PROMAN_TASK_RUN:<taskId>` в `.proman/prompts/`, открытие Agent с **вставкой промпта** (Enter отправляете вы); статус `in_progress` (спиннер) ставит агент через MCP **только если маркер остался в сообщении**; при `done` — список `files`
-- **Add subtask** / **Delete** в деталях задачи — через диалоги IDE (в webview `prompt`/`confirm` недоступны)
-- **Drive Mode** — выделите **заголовок секции** дерева (не первый узел-эпик) и запустите Drive: агент идёт по очереди этого дерева через MCP `proman_*`, начиная с первой разблокированной задачи
-- Структура дерева меняется только после вашего **Approve**
-- При активации пишется `.cursor/mcp.json` (сервер `proman`); после установки **включите** сервер в Settings → MCP и перезапустите MCP / Reload Window
-- Не правьте `.proman/*.json` вручную — только UI / MCP tools
+- **Run in Agent** — prompt with `PROMAN_TASK_RUN:<taskId>` under `.proman/prompts/`, opens Agent with the prompt **pasted** (you press Enter); `in_progress` (spinner) is set by the agent via MCP **only if the marker is still in the message**; on `done`, a `files` list
+- **Add subtask** / **Delete** in task details use IDE dialogs (webview `prompt`/`confirm` are unavailable)
+- **Drive Mode** — select the tree **section header** (not the first epic/task node) and start Drive: the agent walks that tree’s queue via MCP `proman_*`, starting from the first actionable task
+- Tree structure changes only after your **Approve**
+- On activation, writes `.cursor/mcp.json` (`proman` server); after install, **enable** it in Settings → MCP and restart MCP / Reload Window
+- Do not edit `.proman/*.json` by hand — use UI / MCP tools only
 
-### Командная работа (локально)
+### Team work (local)
 
-- История в `.proman/history.json` (кто сменил статус / назначил / когда)
-- Комментарии в `.proman/comments/<taskId>.json`
-- Уведомление при назначении задачи на вас
+- History in `.proman/history.json` (who changed status / assigned / when)
+- Comments in `.proman/comments/<taskId>.json`
+- Notification when a task is assigned to you
 
-### Этап 1 — Git как бэкенд
+### Stage 1 — Git as backend
 
-В `project.json`:
+In `project.json`:
 
 ```json
 "team": {
   "members": [
-    { "username": "alice", "name": "Алиса" },
-    { "username": "bob", "name": "Боб" }
+    { "username": "alice", "name": "Alice" },
+    { "username": "bob", "name": "Bob" }
   ],
   "currentUser": "alice"
 },
@@ -157,28 +155,29 @@ alwaysApply: true
 }
 ```
 
-- Кнопки **Pull** / **Push** в тулбаре
-- Авто-коммит `.proman/` при смене статуса (`proman: @alice todo → done: …`)
-- Команды: `Enable Git Sync`, `Configure Git Sync`
+- **Pull** / **Push** buttons in the toolbar
+- Auto-commit of `.proman/` on status change (`proman: @alice todo → done: …`)
+- Commands: `Enable Git Sync`, `Configure Git Sync`
+- Push after auto-commit always requires confirmation
 
 #### Team Git sync · merge
 
-Источник правды для командного бэклога — файлы `.proman/` в git (`project.json`, `trees/*.json`, …). Слияние веток = обычный **git merge / rebase**. Семантический merge JSON по `task.id` доступен только вручную через **Resolve Proman Merge** (см. ниже).
+Source of truth for the team backlog is the `.proman/` files in git (`project.json`, `trees/*.json`, …). Branch merging is ordinary **git merge / rebase**. Semantic JSON merge by `task.id` is available only via the manual **Resolve Proman Merge** command (see below).
 
-- **Auto-commit** затрагивает только `.proman/` (статусы / дерево), не весь код репозитория.
-- **Pull** меняет весь workspace (не только `.proman/`) — как в предупреждении перед `git pull`.
-- При **conflict markers** или битом JSON в `.proman/` после Pull / Reload / старта показывается предупреждение с путями и действиями **Открыть файл** / **Reload** / **Source Control**. Валидные секции `trees/*.json` продолжают загружаться; conflicted файлы **не** перезаписываются heal-ом с диска.
-- Если `git pull` упал с **CONFLICT**, ошибка сохраняется и hint указывает разрешить маркеры (часто под `.proman/`), затем Reload.
-- **Advanced:** команда `Proman: Resolve Proman Merge` — семантический merge двух валидных JSON-снимков секции по `task.id` (опционально с base для удалений). Не запускается автоматически на pull. Правила: `docs/adr/semantic-tree-merge.md`.
+- **Auto-commit** only touches `.proman/` (statuses / tree), not the rest of the repo.
+- **Pull** changes the whole workspace (not only `.proman/`) — same as the warning before `git pull`.
+- On **conflict markers** or invalid JSON under `.proman/` after Pull / Reload / startup, Proman shows a warning with paths and actions **Open file** / **Reload** / **Source Control**. Valid `trees/*.json` sections still load; conflicted files are **not** overwritten by heal-from-disk.
+- If `git pull` fails with **CONFLICT**, the error is kept and a hint points to resolving markers (often under `.proman/`), then Reload.
+- **Advanced:** command `Proman: Resolve Proman Merge` — semantic merge of two valid section JSON snapshots by `task.id` (optional base for deletes). Never runs automatically on pull. Rules: `docs/adr/semantic-tree-merge.md`.
 
-**Правила командной работы** (меньше CONFLICT в `trees/*.json`):
+**Team workflow** (fewer CONFLICT in `trees/*.json`):
 
-1. **Pull перед** сменой статусов и импортом MD.
-2. **Короткие коммиты** статусов; не смешивайте рефакторинг кода и массовый rewrite дерева в одном коммите без нужды.
-3. По возможности **один «владелец»** активной секции (`trees/<slug>.json`) на спринт.
-4. При **CONFLICT**: разрешите markers в git → Reload; не оставляйте `<<<<<<<` в JSON.
+1. **Pull before** changing statuses or importing MD.
+2. **Short status commits**; do not mix code refactors with a mass tree rewrite in one commit unless necessary.
+3. Prefer **one owner** of an active section (`trees/<slug>.json`) per sprint.
+4. On **CONFLICT**: resolve markers in git → Reload; do not leave `<<<<<<<` in JSON.
 
-### Этап 2 — GitHub Issues
+### Stage 2 — GitHub Issues
 
 ```json
 "github": {
@@ -186,40 +185,41 @@ alwaysApply: true
   "owner": "acme",
   "repo": "my-app",
   "createOnAdd": true,
-  "closeToDone": true
+  "closeToDone": true,
+  "publicOnly": false
 }
 ```
 
-- Создание задачи → Issue; в описании связь: `GitHub: #42`
-- Закрытие Issue → задача `done`
-- Auth: сессия GitHub в Cursor (`repo`)
-- Команды: `Enable GitHub Issues`, `Sync Closed GitHub Issues`
-- Фоновый sync при старте / каждые 5 мин / после Pull
+- Creating a task → Issue; link in description: `GitHub: #42`
+- Closing an Issue → task `done`
+- Auth: GitHub session in Cursor (`repo` or `public_repo`)
+- Commands: `Enable GitHub Issues`, `Sync Closed GitHub Issues`
+- Background sync on startup / every 5 minutes / after Pull
 
 ---
 
-## Команды (основные)
+## Commands (main)
 
-| Команда | Действие |
-|---------|----------|
-| Proman: Open | Фокус на панели |
-| Proman: Import Planning Docs | Импорт MD |
-| Proman: Export Tree to Markdown | Экспорт секции в MD **с текущим прогрессом** |
-| Proman: Delete Task Tree | Удалить секцию (прогресс не сохраняется) |
+| Command | Action |
+|---------|--------|
+| Proman: Open | Focus the panel |
+| Proman: Import Planning Docs | Import Markdown |
+| Proman: Export Tree to Markdown | Export section to MD **with current progress** |
+| Proman: Delete Task Tree | Delete section (progress is discarded) |
 | Proman: Set Current User | `team.currentUser` |
-| Proman: Мои задачи / Все | Фильтр assignee |
-| Proman: Assign Task | Назначение |
+| Proman: My tasks / All | Assignee filter |
+| Proman: Assign Task | Assignment |
 | Proman: Agent Drive Tree | Drive Mode |
-| Proman: Run Task in Agent | Промпт + открытие Agent |
-| Proman: Git Pull / Push | Синхронизация `.proman/` |
-| Proman: Resolve Proman Merge | Advanced: semantic merge двух JSON-снимков секции |
+| Proman: Run Task in Agent | Prompt + open Agent |
+| Proman: Git Pull / Push | Sync `.proman/` |
+| Proman: Resolve Proman Merge | Advanced: semantic merge of two section JSON snapshots |
 | Proman: Enable Git Sync | Git backend |
-| Proman: Enable GitHub Issues | Мост Issues |
+| Proman: Enable GitHub Issues | Issues bridge |
 | Proman: Sync Closed GitHub Issues | closed → done |
 
 ---
 
-## Разработка расширения
+## Extension development
 
 ```bash
 npm install
@@ -227,17 +227,17 @@ npm run build          # esbuild → dist/extension.js
 npm test               # vitest
 npm run test:coverage
 npm run package        # → proman-x.y.z.vsix
-npm run install:cursor # package + install в Cursor
+npm run install:cursor # package + install into Cursor
 ```
 
 - **F5** — Extension Development Host (`Run Proman Extension`)
 - Entry: `src/extension.ts`
-- Core (без UI): `src/core/*`
-- MCP server: `mcp/server.mjs` → бандл `mcp/server.cjs`
+- Core (no UI): `src/core/*`
+- MCP server: `mcp/server.mjs` → bundle `mcp/server.cjs`
 
-### Тесты
+### Tests
 
-Unit-тесты: pathSafety, forest/security, taskFiles, MD export/import, handoff/Agent open, parsers, dependency/drive, history, GitHub links, projectMeta.
+Unit tests: pathSafety, forest/security, taskFiles, MD export/import, handoff/Agent open, parsers, dependency/drive, history, GitHub links, projectMeta.
 
 ```bash
 npm test
@@ -245,18 +245,18 @@ npm test
 
 ---
 
-## Язык интерфейса
+## UI language
 
-UI (команды, дерево, детали задачи, диалоги) следует **языку отображения** Cursor/VS Code (`Configure Display Language`). Сейчас: английский и русский. Документация: [README.md](./README.md) · [README.en.md](./README.en.md).
+The UI (commands, tree, task details, dialogs) follows the Cursor/VS Code **display language** (`Configure Display Language`). Currently: English and Russian. Docs: [README.md](./README.md) · [README.ru.md](./README.ru.md).
 
-## Требования
+## Requirements
 
-- Cursor или VS Code `^1.85.0`
-- Для Git sync: `git` в PATH, workspace = git repo
-- Для GitHub Issues: вход в GitHub в IDE, права на репозиторий
+- Cursor or VS Code `^1.85.0`
+- For Git sync: `git` on PATH, workspace is a git repo
+- For GitHub Issues: signed in to GitHub in the IDE, access to the repository
 
 ---
 
-## Лицензия
+## License
 
-MIT — см. [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE).
