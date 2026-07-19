@@ -24,9 +24,21 @@ Developers and small teams who want to:
 
 ---
 
+## Install
+
+Pre-built builds are on GitHub Releases — no need to compile the extension yourself.
+
+1. Open **[Releases](https://github.com/vibondar/proman/releases)** and download the latest `proman-*.vsix` (e.g. `proman-0.3.16.vsix`).
+2. In Cursor or VS Code: **Extensions** sidebar → `…` (Views and More Actions) → **Install from VSIX…** → select the downloaded file.
+3. **Developer: Reload Window** (Command Palette).
+
+To build from source instead: `npm install && npm run install:cursor` (see [Extension development](#extension-development)).
+
+---
+
 ## Quick start
 
-1. Install the VSIX (`npm run install:cursor` or Install from VSIX) and **Reload Window**.
+1. Install Proman from a [GitHub Release](#install) (or build with `npm run install:cursor`) and **Reload Window**.
 2. Enable the **proman** MCP server: Settings → **MCP** → find `proman` (or check `.cursor/mcp.json` in the project) → enable / Restart. Without this, the Agent cannot update statuses via `proman_*` tools.
 3. Open a project folder → Activity Bar → **Proman**.
 4. Import Markdown or add a root task.

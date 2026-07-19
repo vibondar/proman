@@ -24,9 +24,21 @@
 
 ---
 
+## Установка
+
+Готовые сборки лежат в GitHub Releases — расширение самому собирать не обязательно.
+
+1. Откройте **[Releases](https://github.com/vibondar/proman/releases)** и скачайте свежий `proman-*.vsix` (например `proman-0.3.16.vsix`).
+2. В Cursor или VS Code: боковая панель **Extensions** → `…` (Views and More Actions) → **Install from VSIX…** → выберите скачанный файл.
+3. **Developer: Reload Window** (Command Palette).
+
+Сборка из исходников: `npm install && npm run install:cursor` (см. [Разработка расширения](#разработка-расширения)).
+
+---
+
 ## Быстрый старт
 
-1. Установите VSIX (`npm run install:cursor` или Install from VSIX) и сделайте **Reload Window**.
+1. Установите Proman из [GitHub Release](#установка) (или соберите через `npm run install:cursor`) и сделайте **Reload Window**.
 2. Включите MCP-сервер **proman**: Settings → **MCP** → найдите `proman` (или проверьте `.cursor/mcp.json` в проекте) → включите / Restart. Без этого Agent не сможет обновлять статусы через tools `proman_*`.
 3. Откройте папку проекта → Activity Bar → **Proman**.
 4. Импортируйте MD или добавьте корневую задачу.
